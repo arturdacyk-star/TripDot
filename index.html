@@ -282,6 +282,11 @@
     box-shadow:0 10px 30px rgba(36,48,61,.25); position:relative;
   }
   #routeMapCanvas{width:100%; height:100%;}
+  #routeMapFitBtn{
+    position:absolute; right:10px; bottom:10px; z-index:500;
+    width:38px; height:38px; border-radius:50%; border:none;
+    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
+  }
   .route-map-car-icon{font-size:22px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .tile{
     position:relative; border-radius:5px;
@@ -505,6 +510,7 @@
     <div class="road-wrap" id="roadWrap"></div>
     <div class="route-map-wrap hidden" id="routeMapWrap">
       <div id="routeMapCanvas"></div>
+      <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⤢</button>
     </div>
 
     <div class="bottom-actions">
@@ -590,6 +596,9 @@ const I18N = {
     mapPickBtnText:'Wskaż punkt na mapie',
     mapPickerTitle:'Wskaż cel na mapie',
     mapPickerConfirm:'Zatwierdź ten punkt',
+    mapViewShowTitle:'Pokaż trasę na mapie',
+    mapViewSplitTitle:'Pokaż planszę i mapę razem',
+    mapViewHideTitle:'Wróć do planszy',
     themes:{
       road:{label:'Droga', shape:'siatka wężowa'},
       forest:{label:'Las', shape:'wąska serpentyna'},
@@ -657,6 +666,9 @@ const I18N = {
     mapPickBtnText:'Pick a point on the map',
     mapPickerTitle:'Pick a destination on the map',
     mapPickerConfirm:'Confirm this point',
+    mapViewShowTitle:'Show route on map',
+    mapViewSplitTitle:'Show board and map together',
+    mapViewHideTitle:'Back to board',
     themes:{
       road:{label:'Road', shape:'snake grid'},
       forest:{label:'Forest', shape:'narrow switchback'},
@@ -946,14 +958,30 @@ function applyThemeVars(theme){
 }
 
 function buildGridTiles(wrap, theme, count){
-  wrap.className = 'road-wrap layout-grid';
+  wrap.className = 'road-wrap layout-grid' + (boardViewMode === 'map' ? ' hidden' : '');
   wrap.style.display = 'grid';
   // square-ish arrangement (cols ≈ rows) reads much better than one driven
   // by the container's own aspect ratio; theme bias still gives forest its
   // narrower switchback character
   let cols = Math.max(3, Math.round(Math.sqrt(count * (theme.gridAspectBias || 1))));
   cols = Math.min(cols, count);
-  const rows = Math.ceil(count / cols);
+
+  // the grid interleaves a "turn" tile between every pair of rows, and those
+  // turn tiles are real counted route tiles too (see below) — so to make
+  // the tile-count slider mean the same total across every theme, we solve
+  // for how many rows fit `count` tiles TOTAL (regular + turns combined),
+  // not just `count` regular tiles with turns added on top
+  let rows = Math.max(1, Math.ceil(count / cols));
+  for(let i = 0; i < 6; i++){
+    const turns = Math.max(0, rows - 1);
+    const regularBudget = Math.max(rows, count - turns);
+    const newRows = Math.max(1, Math.ceil(regularBudget / cols));
+    if(newRows === rows) break;
+    rows = newRows;
+  }
+  const turnsTotal = Math.max(0, rows - 1);
+  const regularCount = Math.max(rows, count - turnsTotal);
+
   const colGap = count > 200 ? 1 : count > 80 ? 2 : 4;
   wrap.style.rowGap = '0px';
   wrap.style.columnGap = colGap + 'px';
@@ -974,7 +1002,7 @@ function buildGridTiles(wrap, theme, count){
   let seq = 0;
   for(let row = 0; row < rows; row++){
     const isLastRow = (row === rows - 1);
-    const tilesInRow = isLastRow ? (count - row*cols) : cols;
+    const tilesInRow = isLastRow ? (regularCount - row*cols) : cols;
     for(let c = 0; c < tilesInRow; c++){
       seq++;
       const col = (row % 2 === 1) ? (cols - 1 - c) : c;
@@ -1017,7 +1045,7 @@ function buildGridTiles(wrap, theme, count){
 }
 
 function buildPathTiles(wrap, theme, count){
-  wrap.className = 'road-wrap layout-path';
+  wrap.className = 'road-wrap layout-path' + (boardViewMode === 'map' ? ' hidden' : '');
   wrap.style.display = 'block';
   boardTileCount = count;
   const W = wrap.clientWidth, H = wrap.clientHeight;
@@ -1498,7 +1526,7 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     saveTripState();
   } finally {
     routeRecalc.pending = false;
-    if(routeMapVisible) renderRouteMap(false);
+    if(boardViewMode !== 'board') renderRouteMap(false);
   }
 }
 
@@ -1888,9 +1916,11 @@ $('themeSwitchBtn').addEventListener('click', () => {
    line is the same geometry already used for progress tracking, and the
    car marker uses the real GPS fix, so if the driver takes a different
    road the marker will visibly drift off the drawn line until the
-   existing route-recalculation logic redraws it ---- */
+   existing route-recalculation logic redraws it.
+   Tapping the button cycles: board only -> map only -> both split -> board only ---- */
 let routeMap = null, routeMapLine = null, routeMapCarMarker = null,
-    routeMapStartMarker = null, routeMapDestMarker = null, routeMapVisible = false;
+    routeMapStartMarker = null, routeMapDestMarker = null,
+    boardViewMode = 'board'; // 'board' | 'map' | 'split'
 
 function ensureRouteMap(){
   if(routeMap) return;
@@ -1933,7 +1963,7 @@ function renderRouteMap(fitBounds){
 // different road shows up visibly off the drawn route line instead of
 // looking like they're on track when they aren't
 function updateRouteMapCarPosition(){
-  if(!routeMap || !routeMapVisible) return;
+  if(!routeMap || boardViewMode === 'board') return;
   const pos = gpsState.lastPosition || (routePoints && routePoints[0] ? {lat:routePoints[0][0], lng:routePoints[0][1]} : (startLat !== undefined ? {lat:startLat, lng:startLng} : null));
   if(!pos) return;
   const theme = activeThemeInfo();
@@ -1945,11 +1975,24 @@ function updateRouteMapCarPosition(){
   }
 }
 
+function applyBoardViewMode(){
+  $('roadWrap').classList.toggle('hidden', boardViewMode === 'map');
+  $('routeMapWrap').classList.toggle('hidden', boardViewMode === 'board');
+  $('mapViewBtn').classList.toggle('active', boardViewMode !== 'board');
+  $('mapViewBtn').title = boardViewMode === 'board' ? t('mapViewShowTitle')
+    : boardViewMode === 'map' ? t('mapViewSplitTitle') : t('mapViewHideTitle');
+  if(boardViewMode !== 'board'){
+    ensureRouteMap();
+    setTimeout(() => {
+      routeMap.invalidateSize();
+      renderRouteMap(true);
+    }, 0);
+  }
+}
+
 function resetRouteMapView(){
-  routeMapVisible = false;
-  $('mapViewBtn').classList.remove('active');
-  $('routeMapWrap').classList.add('hidden');
-  $('roadWrap').classList.remove('hidden');
+  boardViewMode = 'board';
+  applyBoardViewMode();
   if(routeMapLine && routeMap){ routeMap.removeLayer(routeMapLine); routeMapLine = null; }
   if(routeMapCarMarker && routeMap){ routeMap.removeLayer(routeMapCarMarker); routeMapCarMarker = null; }
   if(routeMapStartMarker && routeMap){ routeMap.removeLayer(routeMapStartMarker); routeMapStartMarker = null; }
@@ -1958,20 +2001,14 @@ function resetRouteMapView(){
 
 $('mapViewBtn').addEventListener('click', () => {
   $('themeSwitchPopover').classList.add('hidden');
-  routeMapVisible = !routeMapVisible;
-  $('mapViewBtn').classList.toggle('active', routeMapVisible);
-  if(routeMapVisible){
-    $('roadWrap').classList.add('hidden');
-    $('routeMapWrap').classList.remove('hidden');
-    ensureRouteMap();
-    setTimeout(() => {
-      routeMap.invalidateSize();
-      renderRouteMap(true);
-    }, 0);
-  } else {
-    $('routeMapWrap').classList.add('hidden');
-    $('roadWrap').classList.remove('hidden');
-  }
+  boardViewMode = boardViewMode === 'board' ? 'map' : boardViewMode === 'map' ? 'split' : 'board';
+  applyBoardViewMode();
+  if(boardViewMode !== 'map') buildBoard(); // roadWrap was hidden (className got reset) — rebuild so tiles reappear correctly
+  if(boardViewMode !== 'board') renderProgress(maxProgress);
+});
+
+$('routeMapFitBtn').addEventListener('click', () => {
+  if(routeMapLine && routeMap) routeMap.fitBounds(routeMapLine.getBounds(), { padding:[24,24] });
 });
 
 $('resetBtn').addEventListener('click', () => {
@@ -2072,6 +2109,7 @@ function applyStaticTexts(){
   $('statPercentLbl').textContent = t('statPercentLbl');
   $('statKmLbl').textContent = t('statKmLbl');
   $('resetBtn').textContent = t('resetBtn');
+  if(typeof boardViewMode !== 'undefined') applyBoardViewMode();
 
   $('langQuickBtn').textContent = settings.lang.toUpperCase();
   $('langBtnPl').classList.toggle('selected', settings.lang === 'pl');
