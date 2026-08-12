@@ -237,6 +237,9 @@
   .top-bar{width:100%; display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-shrink:0;}
   .stat{background:var(--paper); border-radius:14px; padding:7px 14px; box-shadow:0 6px 16px rgba(36,48,61,.1); text-align:center; min-width:78px;}
   #themeSwitchBtn{font-size:18px; align-self:center;}
+  #mapViewBtn{font-size:18px; align-self:center;}
+  #mapViewBtn.active{background:var(--coral); color:#fff;}
+  .top-bar-btns{display:flex; gap:8px; align-self:center;}
   .theme-switch-popover{
     position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:50;
     background:#fff; border-radius:16px; padding:10px; box-shadow:0 10px 24px rgba(36,48,61,.25);
@@ -274,6 +277,12 @@
     box-shadow:0 10px 30px rgba(36,48,61,.25); transition:background .4s ease;
     position:relative;
   }
+  .route-map-wrap{
+    width:100%; flex:1; min-height:0; border-radius:18px; overflow:hidden;
+    box-shadow:0 10px 30px rgba(36,48,61,.25); position:relative;
+  }
+  #routeMapCanvas{width:100%; height:100%;}
+  .route-map-car-icon{font-size:22px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .tile{
     position:relative; border-radius:5px;
     background:var(--asphalt-light);
@@ -469,7 +478,10 @@
         <div class="num" id="statPercent">0%</div>
         <div class="lbl" id="statPercentLbl">trasy</div>
       </div>
-      <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
+      <div class="top-bar-btns">
+        <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
+        <button class="icon-btn" id="mapViewBtn" title="Pokaż trasę na mapie">🗺️</button>
+      </div>
       <div class="stat">
         <div class="num" id="statKm">–</div>
         <div class="lbl" id="statKmLbl">km zostało</div>
@@ -491,6 +503,9 @@
     <div class="confetti-overlay hidden" id="confettiOverlay"></div>
 
     <div class="road-wrap" id="roadWrap"></div>
+    <div class="route-map-wrap hidden" id="routeMapWrap">
+      <div id="routeMapCanvas"></div>
+    </div>
 
     <div class="bottom-actions">
       <button class="secondary-btn" id="resetBtn">🔄 Nowa podróż</button>
@@ -718,10 +733,15 @@ function addToDestHistory(r){
     localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 6)));
   } catch(e){}
 }
-function showDestHistory(){
-  const list = loadDestHistory();
+function normalizeForMatch(s){
+  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function showDestSuggestions(query){
+  const q = normalizeForMatch(query || '');
+  const all = loadDestHistory();
+  const list = q ? all.filter(r => normalizeForMatch(r.fullName).includes(q) || normalizeForMatch(r.shortName).includes(q)) : all;
   const listEl = $('resultsList');
-  if(list.length === 0) return;
+  if(list.length === 0){ listEl.classList.add('hidden'); listEl.innerHTML = ''; return; }
   listEl.innerHTML = '';
   const label = document.createElement('div');
   label.className = 'result-history-label';
@@ -847,6 +867,7 @@ function checkForSavedTrip(){
     $('resumeBanner').classList.add('hidden');
     $('setupScreen').classList.add('hidden');
     $('boardScreen').classList.remove('hidden');
+    resetRouteMapView();
     buildBoard();
     renderProgress(maxProgress);
 
@@ -1212,6 +1233,7 @@ function renderProgress(fraction){
   } else {
     msgEl.textContent = t('msgStart') + ' ' + theme.startIcon;
   }
+  updateRouteMapCarPosition();
 }
 
 /* ---- arrival celebration: confetti (tap anywhere to dismiss early) plus
@@ -1476,6 +1498,7 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     saveTripState();
   } finally {
     routeRecalc.pending = false;
+    if(routeMapVisible) renderRouteMap(false);
   }
 }
 
@@ -1626,11 +1649,10 @@ $('searchBtn').addEventListener('click', async () => {
 });
 $('destAddress').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); $('searchBtn').click(); } });
 $('destAddress').addEventListener('focus', () => {
-  if(!$('destAddress').value.trim()) showDestHistory();
+  showDestSuggestions($('destAddress').value.trim());
 });
 $('destAddress').addEventListener('input', () => {
-  if(!$('destAddress').value.trim()) showDestHistory();
-  else { $('resultsList').classList.add('hidden'); $('resultsList').innerHTML = ''; }
+  showDestSuggestions($('destAddress').value.trim());
 });
 
 /* ---- pick destination by tapping a map (free OpenStreetMap/Leaflet,
@@ -1818,6 +1840,7 @@ $('startBtn').addEventListener('click', async () => {
   maxProgress = 0;
   $('setupScreen').classList.add('hidden');
   $('boardScreen').classList.remove('hidden');
+  resetRouteMapView();
   buildBoard();
   renderProgress(0);
   saveTripState();
@@ -1860,8 +1883,100 @@ $('themeSwitchBtn').addEventListener('click', () => {
   }
 });
 
+/* ---- route map view: an alternate view of the board that shows the
+   actual route on a real map (Leaflet/OSM) instead of tiles — the route
+   line is the same geometry already used for progress tracking, and the
+   car marker uses the real GPS fix, so if the driver takes a different
+   road the marker will visibly drift off the drawn line until the
+   existing route-recalculation logic redraws it ---- */
+let routeMap = null, routeMapLine = null, routeMapCarMarker = null,
+    routeMapStartMarker = null, routeMapDestMarker = null, routeMapVisible = false;
+
+function ensureRouteMap(){
+  if(routeMap) return;
+  routeMap = L.map('routeMapCanvas', { zoomControl:true, attributionControl:true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(routeMap);
+}
+
+function renderRouteMap(fitBounds){
+  if(!routeMap || destLat === undefined) return;
+  // startLat/startLng aren't persisted across a resumed trip, so fall back
+  // to the route's own first point, then to the last known GPS fix
+  const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
+  const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
+  if(!currentPos) return; // nothing usable to draw yet
+  const line = (usingRoute && routePoints && routePoints.length > 1)
+    ? routePoints
+    : [[currentPos.lat, currentPos.lng], [destLat, destLng]];
+
+  if(routeMapLine) routeMap.removeLayer(routeMapLine);
+  routeMapLine = L.polyline(line, { color:'#FF6B5B', weight:5, opacity:.85 }).addTo(routeMap);
+
+  const startPoint = routeStart || currentPos;
+  if(!routeMapStartMarker){
+    routeMapStartMarker = L.circleMarker([startPoint.lat, startPoint.lng], { radius:7, color:'#fff', weight:2, fillColor:'#39B6E0', fillOpacity:1 }).addTo(routeMap);
+  } else routeMapStartMarker.setLatLng([startPoint.lat, startPoint.lng]);
+
+  if(!routeMapDestMarker){
+    routeMapDestMarker = L.marker([destLat, destLng]).addTo(routeMap);
+  } else routeMapDestMarker.setLatLng([destLat, destLng]);
+
+  updateRouteMapCarPosition();
+
+  if(fitBounds) routeMap.fitBounds(routeMapLine.getBounds(), { padding:[24,24] });
+}
+
+// keeps the car marker on the driver's real GPS position — deliberately
+// NOT interpolated from the progress percentage, so a driver on a
+// different road shows up visibly off the drawn route line instead of
+// looking like they're on track when they aren't
+function updateRouteMapCarPosition(){
+  if(!routeMap || !routeMapVisible) return;
+  const pos = gpsState.lastPosition || (routePoints && routePoints[0] ? {lat:routePoints[0][0], lng:routePoints[0][1]} : (startLat !== undefined ? {lat:startLat, lng:startLng} : null));
+  if(!pos) return;
+  const theme = activeThemeInfo();
+  if(!routeMapCarMarker){
+    const icon = L.divIcon({ className:'', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
+    routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
+  } else {
+    routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
+  }
+}
+
+function resetRouteMapView(){
+  routeMapVisible = false;
+  $('mapViewBtn').classList.remove('active');
+  $('routeMapWrap').classList.add('hidden');
+  $('roadWrap').classList.remove('hidden');
+  if(routeMapLine && routeMap){ routeMap.removeLayer(routeMapLine); routeMapLine = null; }
+  if(routeMapCarMarker && routeMap){ routeMap.removeLayer(routeMapCarMarker); routeMapCarMarker = null; }
+  if(routeMapStartMarker && routeMap){ routeMap.removeLayer(routeMapStartMarker); routeMapStartMarker = null; }
+  if(routeMapDestMarker && routeMap){ routeMap.removeLayer(routeMapDestMarker); routeMapDestMarker = null; }
+}
+
+$('mapViewBtn').addEventListener('click', () => {
+  $('themeSwitchPopover').classList.add('hidden');
+  routeMapVisible = !routeMapVisible;
+  $('mapViewBtn').classList.toggle('active', routeMapVisible);
+  if(routeMapVisible){
+    $('roadWrap').classList.add('hidden');
+    $('routeMapWrap').classList.remove('hidden');
+    ensureRouteMap();
+    setTimeout(() => {
+      routeMap.invalidateSize();
+      renderRouteMap(true);
+    }, 0);
+  } else {
+    $('routeMapWrap').classList.add('hidden');
+    $('roadWrap').classList.remove('hidden');
+  }
+});
+
 $('resetBtn').addEventListener('click', () => {
   $('themeSwitchPopover').classList.add('hidden');
+  resetRouteMapView();
   stopTracking();
   releaseWakeLock();
   clearTripState();
