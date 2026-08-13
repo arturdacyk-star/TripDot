@@ -1355,9 +1355,13 @@ function projectGpsToRoute(lat, lng, accuracy){
     }
   };
   testRange(start, end);
-  if(!best || best.distanceKm > Math.max(0.08, (accuracy||30)/1000*3)){
-    testRange(0, routeMeta.segments.length - 1);
-  }
+  // NOTE: this used to fall back to searching the *entire* route whenever
+  // the local match was weak. That could snap the match to a point that's
+  // spatially close but far along the route (e.g. a road passing near the
+  // destination while you're still mid-trip), causing a sudden false jump
+  // in progress. Now we only ever look near where we last knew we were —
+  // a genuinely poor match here correctly falls through to the off-route /
+  // weak-GPS handling below instead of guessing a distant index.
   return best;
 }
 
@@ -1918,7 +1922,7 @@ $('themeSwitchBtn').addEventListener('click', () => {
    road the marker will visibly drift off the drawn line until the
    existing route-recalculation logic redraws it.
    Tapping the button cycles: board only -> map only -> both split -> board only ---- */
-let routeMap = null, routeMapLine = null, routeMapCarMarker = null,
+let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapCarMarker = null,
     routeMapStartMarker = null, routeMapDestMarker = null,
     boardViewMode = 'board'; // 'board' | 'map' | 'split'
 
@@ -1937,12 +1941,25 @@ function renderRouteMap(fitBounds){
   const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
   const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
   if(!currentPos) return; // nothing usable to draw yet
-  const line = (usingRoute && routePoints && routePoints.length > 1)
-    ? routePoints
-    : [[currentPos.lat, currentPos.lng], [destLat, destLng]];
+  const curLatLng = [currentPos.lat, currentPos.lng];
 
-  if(routeMapLine) routeMap.removeLayer(routeMapLine);
-  routeMapLine = L.polyline(line, { color:'#FF6B5B', weight:5, opacity:.85 }).addTo(routeMap);
+  let donePoints, todoPoints;
+  if(usingRoute && routePoints && routePoints.length > 1){
+    // split the route geometry at the segment we last matched to, so the
+    // covered part can be drawn in a different colour from what's left
+    const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
+    donePoints = routePoints.slice(0, idx + 1).concat([curLatLng]);
+    todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
+  } else {
+    const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
+    donePoints = [startPt, curLatLng];
+    todoPoints = [curLatLng, [destLat, destLng]];
+  }
+
+  if(routeMapLineDone) routeMap.removeLayer(routeMapLineDone);
+  if(routeMapLineTodo) routeMap.removeLayer(routeMapLineTodo);
+  routeMapLineDone = L.polyline(donePoints, { color:'#3FAE6A', weight:5, opacity:.9 }).addTo(routeMap);
+  routeMapLineTodo = L.polyline(todoPoints, { color:'#FF6B5B', weight:5, opacity:.85 }).addTo(routeMap);
 
   const startPoint = routeStart || currentPos;
   if(!routeMapStartMarker){
@@ -1955,7 +1972,10 @@ function renderRouteMap(fitBounds){
 
   updateRouteMapCarPosition();
 
-  if(fitBounds) routeMap.fitBounds(routeMapLine.getBounds(), { padding:[24,24] });
+  if(fitBounds){
+    const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
+    routeMap.fitBounds(bounds, { padding:[24,24] });
+  }
 }
 
 // keeps the car marker on the driver's real GPS position — deliberately
@@ -1993,7 +2013,8 @@ function applyBoardViewMode(){
 function resetRouteMapView(){
   boardViewMode = 'board';
   applyBoardViewMode();
-  if(routeMapLine && routeMap){ routeMap.removeLayer(routeMapLine); routeMapLine = null; }
+  if(routeMapLineDone && routeMap){ routeMap.removeLayer(routeMapLineDone); routeMapLineDone = null; }
+  if(routeMapLineTodo && routeMap){ routeMap.removeLayer(routeMapLineTodo); routeMapLineTodo = null; }
   if(routeMapCarMarker && routeMap){ routeMap.removeLayer(routeMapCarMarker); routeMapCarMarker = null; }
   if(routeMapStartMarker && routeMap){ routeMap.removeLayer(routeMapStartMarker); routeMapStartMarker = null; }
   if(routeMapDestMarker && routeMap){ routeMap.removeLayer(routeMapDestMarker); routeMapDestMarker = null; }
@@ -2008,7 +2029,9 @@ $('mapViewBtn').addEventListener('click', () => {
 });
 
 $('routeMapFitBtn').addEventListener('click', () => {
-  if(routeMapLine && routeMap) routeMap.fitBounds(routeMapLine.getBounds(), { padding:[24,24] });
+  if(!routeMap || !routeMapLineDone || !routeMapLineTodo) return;
+  const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
+  routeMap.fitBounds(bounds, { padding:[24,24] });
 });
 
 $('resetBtn').addEventListener('click', () => {
