@@ -589,6 +589,7 @@ const I18N = {
     searching:'Szukam…',
     gpsWaiting:'Czekam na stabilny sygnał GPS…',
     gpsWeak:'Sygnał GPS jest chwilowo niedokładny…',
+    routeRecalcFailed:'Nie udało się przeliczyć trasy — liczę odległość w linii prostej.',
     resumeTitle:'▶️ Masz zapisaną podróż',
     resumeContinue:'Kontynuuj',
     resumeNew:'Zacznij nową',
@@ -659,6 +660,7 @@ const I18N = {
     searching:'Searching…',
     gpsWaiting:'Waiting for a stable GPS signal…',
     gpsWeak:'GPS signal is temporarily inaccurate…',
+    routeRecalcFailed:"Couldn't recalculate the route — using straight-line distance instead.",
     resumeTitle:'▶️ You have a saved trip',
     resumeContinue:'Continue',
     resumeNew:'Start new',
@@ -912,6 +914,28 @@ function buildCumulativeDistances(points){
   return cum;
 }
 
+async function fetchRouteFromMapbox(sLat, sLng, dLat, dLng){
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson&access_token=${MAPBOX_TOKEN}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Mapbox Directions HTTP ' + res.status);
+  const data = await res.json();
+  if(!data.routes || data.routes.length === 0) throw new Error('no road route');
+  const route = data.routes[0];
+  const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  const cum = buildCumulativeDistances(points);
+  return {points, cum, totalKm: route.distance / 1000};
+}
+async function fetchRouteFromOsrm(sLat, sLng, dLat, dLng){
+  const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('OSRM HTTP ' + res.status);
+  const data = await res.json();
+  if(!data.routes || data.routes.length === 0) throw new Error('no road route');
+  const route = data.routes[0];
+  const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  const cum = buildCumulativeDistances(points);
+  return {points, cum, totalKm: route.distance / 1000};
+}
 async function fetchRoute(sLat, sLng, dLat, dLng){
   if(API_BASE_URL){
     const data = await apiFetch('/route', {
@@ -924,26 +948,19 @@ async function fetchRoute(sLat, sLng, dLat, dLng){
     const cum = buildCumulativeDistances(points);
     return {points, cum, totalKm: Number(data.totalKm || data.distanceKm || cum[cum.length-1])};
   }
+  // real runtime fallback: if Mapbox fails for any reason (spotty signal
+  // mid-drive, rate limit, timeout...) try OSRM before giving up on a road
+  // route entirely — previously OSRM only ran when no Mapbox token was
+  // configured at all, so a single failed Mapbox call during a mid-trip
+  // recalculation silently dropped straight to straight-line mode for good
   if(MAPBOX_TOKEN){
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson&access_token=${MAPBOX_TOKEN}`;
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('Mapbox Directions HTTP ' + res.status);
-    const data = await res.json();
-    if(!data.routes || data.routes.length === 0) throw new Error('no road route');
-    const route = data.routes[0];
-    const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
-    const cum = buildCumulativeDistances(points);
-    return {points, cum, totalKm: route.distance / 1000};
+    try{
+      return await fetchRouteFromMapbox(sLat, sLng, dLat, dLng);
+    } catch(e){
+      console.warn('Mapbox routing failed, falling back to OSRM:', e);
+    }
   }
-  const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('OSRM HTTP ' + res.status);
-  const data = await res.json();
-  if(!data.routes || data.routes.length === 0) throw new Error('no road route');
-  const route = data.routes[0];
-  const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
-  const cum = buildCumulativeDistances(points);
-  return {points, cum, totalKm: route.distance / 1000};
+  return await fetchRouteFromOsrm(sLat, sLng, dLat, dLng);
 }
 
 /* ---------- BOARD BUILDING (always fits the container, no scrolling) ---------- */
@@ -1532,6 +1549,14 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     routeRecalc.active = false;
     updateRouteModeIcon();
     saveTripState();
+    $('boardStatus').textContent = t('routeRecalcFailed');
+    $('boardStatus').classList.add('error');
+    setTimeout(() => {
+      if($('boardStatus').textContent === t('routeRecalcFailed')) {
+        $('boardStatus').textContent = '';
+        $('boardStatus').classList.remove('error');
+      }
+    }, 6000);
   } finally {
     routeRecalc.pending = false;
     if(boardViewMode !== 'board') renderRouteMap(false);
