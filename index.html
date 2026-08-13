@@ -288,6 +288,7 @@
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
   .route-map-car-icon{font-size:22px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
   .tile{
     position:relative; border-radius:5px;
     background:var(--asphalt-light);
@@ -1465,11 +1466,14 @@ function acceptProgressFromGps(pos){
 // but if it's sustained AND the car is actually moving, the original route
 // is no longer useful and we quietly recalculate from here
 function handlePossibleDeviation(lat, lng, accuracy, match, now){
-  const deviationThreshold = Math.max(0.45, (accuracy || 30) / 1000 * 6); // km
-  if(match.distanceKm <= deviationThreshold){
-    routeRecalc.active = false;
-    return;
-  }
+  // this is only ever called once we're already further off the matched
+  // route segment than acceptProgressFromGps's own offRouteThreshold — an
+  // earlier, separate (larger) threshold here used to require being even
+  // FURTHER off before the recalculation timer would even start, leaving a
+  // "dead zone" in between where progress stopped updating (too far to
+  // accept) but recalculation never kicked in either (not far enough to
+  // count as deviating). A moderate detour — e.g. a parallel street a
+  // couple hundred metres over — could sit in that gap indefinitely.
   if(!routeRecalc.active){
     routeRecalc.active = true;
     routeRecalc.startTime = now;
@@ -1988,7 +1992,7 @@ function updateRouteMapCarPosition(){
   if(!pos) return;
   const theme = activeThemeInfo();
   if(!routeMapCarMarker){
-    const icon = L.divIcon({ className:'', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
+    const icon = L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
     routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
   } else {
     routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
