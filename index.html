@@ -877,7 +877,7 @@ function checkForSavedTrip(){
       lastAcceptedProgress: maxProgress,
       lastPosition: null, lastTimestamp: 0, pendingJump: null
     };
-    routeRecalc = {active:false, startTime:0, startPos:null, lastRecalcAt:0, pending:false};
+    routeRecalc = {pending:false, lastFetchAt: performance.now()};
 
     $('resumeBanner').classList.add('hidden');
     $('setupScreen').classList.add('hidden');
@@ -1321,7 +1321,7 @@ $('confettiOverlay').addEventListener('click', dismissConfetti);
    żeby nie pomylić np. mostu z równoległą drogą serwisową pod spodem.
 */
 let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
-let routeRecalc = {active:false, startTime:0, startPos:null, lastRecalcAt:0, pending:false};
+let routeRecalc = {pending:false, lastFetchAt: performance.now()};
 let routeMeta = {segments:null};
 
 function projectPointToSegment(lat, lng, a, b){
@@ -1415,13 +1415,19 @@ function acceptProgressFromGps(pos){
     matchedIndex = match.index;
     const offRouteThreshold = Math.max(0.12, accuracy/1000*4);
     if(match.distanceKm > offRouteThreshold){
-      handlePossibleDeviation(lat, lng, accuracy, match, now);
+      // genuinely off the route right now — worth a fresh route from here,
+      // not just a timer tick. maybeRefreshRoute's own cooldown stops this
+      // from spamming the API if we stay off-route for a while.
+      maybeRefreshRoute(lat, lng, now);
       $('boardStatus').textContent = t('gpsWeak');
       $('boardStatus').classList.remove('error');
       return; // too far from any known segment — likely noisy fix, skip it
     }
-    routeRecalc.active = false; // back close enough to the route — reset the deviation timer
   } else {
+    // no usable match at all — either already in straight-line fallback, or
+    // GPS doesn't land anywhere near the route. Try periodically to (re)get
+    // a real route from here (e.g. connectivity came back).
+    maybeRefreshRoute(lat, lng, now);
     // straight-line mode: totalDistance is the distance from wherever this
     // mode started (trip start, or a mid-trip fallback) to the destination;
     // progressBase (usually 0 here, but not always — see the mid-trip
@@ -1478,33 +1484,18 @@ function acceptProgressFromGps(pos){
   }
 }
 
-// called when GPS sits too far from the calculated route to trust — not an
-// error by itself (there's often more than one way to reach a destination),
-// but if it's sustained AND the car is actually moving, the original route
-// is no longer useful and we quietly recalculate from here
-function handlePossibleDeviation(lat, lng, accuracy, match, now){
-  // this is only ever called once we're already further off the matched
-  // route segment than acceptProgressFromGps's own offRouteThreshold — an
-  // earlier, separate (larger) threshold here used to require being even
-  // FURTHER off before the recalculation timer would even start, leaving a
-  // "dead zone" in between where progress stopped updating (too far to
-  // accept) but recalculation never kicked in either (not far enough to
-  // count as deviating). A moderate detour — e.g. a parallel street a
-  // couple hundred metres over — could sit in that gap indefinitely.
-  if(!routeRecalc.active){
-    routeRecalc.active = true;
-    routeRecalc.startTime = now;
-    routeRecalc.startPos = {lat, lng};
-    return;
-  }
-  const elapsedSec = (now - routeRecalc.startTime) / 1000;
-  const movedKm = haversine(routeRecalc.startPos.lat, routeRecalc.startPos.lng, lat, lng);
-  const cooldownOk = (now - routeRecalc.lastRecalcAt) > 150000; // 2.5 min between recalculations
-  if(elapsedSec >= 50 && movedKm >= 0.25 && cooldownOk && !routeRecalc.pending){
-    routeRecalc.pending = true;
-    routeRecalc.lastRecalcAt = now;
-    recalcRouteFromCurrentPosition(lat, lng);
-  }
+// triggered only when we're actually off the route (or have no usable
+// match at all) — not on a blind schedule while happily on-route, since
+// that would just waste routing requests for no benefit. The cooldown
+// below only exists to stop repeated back-to-back fetches while stuck
+// off-route (e.g. parked), not to delay a normal, one-off recalculation.
+const ROUTE_REFRESH_COOLDOWN_MS = 20000;
+function maybeRefreshRoute(lat, lng, now){
+  if(routeRecalc.pending) return;
+  if(now - routeRecalc.lastFetchAt < ROUTE_REFRESH_COOLDOWN_MS) return;
+  routeRecalc.pending = true;
+  routeRecalc.lastFetchAt = now;
+  recalcRouteFromCurrentPosition(lat, lng);
 }
 
 function updateRouteModeIcon(){
@@ -1531,7 +1522,6 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     buildSegmentMeta();
     gpsState.lastAcceptedIndex = 0;
     gpsState.pendingJump = null;
-    routeRecalc.active = false;
     updateRouteModeIcon();
     saveTripState();
   } catch(e){
@@ -1546,7 +1536,6 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     totalDistance = haversine(lat, lng, destLat, destLng);
     gpsState.lastAcceptedIndex = 0;
     gpsState.pendingJump = null;
-    routeRecalc.active = false;
     updateRouteModeIcon();
     saveTripState();
     $('boardStatus').textContent = t('routeRecalcFailed');
@@ -1869,7 +1858,7 @@ $('startBtn').addEventListener('click', async () => {
   routeMeta.segments = null;
   progressBase = 0;
   arrivalCelebrated = false;
-  routeRecalc = {active:false, startTime:0, startPos:null, lastRecalcAt:0, pending:false};
+  routeRecalc = {pending:false, lastFetchAt: performance.now()};
 
   if(settings.forceStraightLine){
     totalDistance = haversine(startLat, startLng, destLat, destLng);
@@ -2081,7 +2070,7 @@ $('resetBtn').addEventListener('click', () => {
   progressBase = 0;
   arrivalCelebrated = false;
   dismissConfetti();
-  routeRecalc = {active:false, startTime:0, startPos:null, lastRecalcAt:0, pending:false};
+  routeRecalc = {pending:false, lastFetchAt: performance.now()};
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
   $('destChip').classList.add('hidden');
   $('destAddress').value = '';
