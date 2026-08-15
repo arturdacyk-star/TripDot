@@ -1356,23 +1356,36 @@ function projectGpsToRoute(lat, lng, accuracy){
   const start = Math.max(0, gpsState.lastAcceptedIndex - 20);
   const end = Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
   let best = null;
+  let move = 0, gpsBearing = null;
+  if(gpsState.lastPosition && gpsState.lastTimestamp){
+    move = haversine(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
+    gpsBearing = bearing(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
+  }
   const testRange = (from, to) => {
     for(let i = from; i <= to; i++){
       const s = routeMeta.segments[i];
       const p = projectPointToSegment(lat, lng, s.a, s.b);
       const along = routeCumDist[i] + p.alongKm;
       let score = p.distanceKm;
-      if(gpsState.lastPosition && gpsState.lastTimestamp){
-        const dt = Math.max(0.5, (performance.now() - gpsState.lastTimestamp) / 1000);
-        const move = haversine(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
-        const gpsBearing = bearing(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
-        const hd = angleDiff(gpsBearing, s.heading);
+      let hd = null;
+      if(gpsBearing !== null){
+        hd = angleDiff(gpsBearing, s.heading);
         if(move > 0.02 && hd > 100) score += Math.min(0.15, p.distanceKm + 0.05);
       }
-      if(!best || score < best.score) best = {index:i, alongKm:along, distanceKm:p.distanceKm, t:p.t, score};
+      if(!best || score < best.score) best = {index:i, alongKm:along, distanceKm:p.distanceKm, t:p.t, score, headingDiff:hd};
     }
   };
   testRange(start, end);
+  // The window above only looks a little behind and a lot ahead of the
+  // last matched point, so a wrong-way move — missed a junction, doubled
+  // back on a motorway — can still land on a nearby segment with a small
+  // on-road distance, hiding the fact that we're really off-route. Flag
+  // that case explicitly using GPS heading vs. the matched segment's
+  // heading, so acceptProgressFromGps can treat it as off-route too, not
+  // just a plain distance check.
+  if(best && move > 0.02 && best.headingDiff !== null && best.headingDiff > 100){
+    best.headingMismatch = true;
+  }
   // NOTE: this used to fall back to searching the *entire* route whenever
   // the local match was weak. That could snap the match to a point that's
   // spatially close but far along the route (e.g. a road passing near the
@@ -1414,10 +1427,13 @@ function acceptProgressFromGps(pos){
     fraction = progressBase + (1 - progressBase) * (match.alongKm / totalDistance);
     matchedIndex = match.index;
     const offRouteThreshold = Math.max(0.12, accuracy/1000*4);
-    if(match.distanceKm > offRouteThreshold){
-      // genuinely off the route right now — worth a fresh route from here,
-      // not just a timer tick. maybeRefreshRoute's own cooldown stops this
-      // from spamming the API if we stay off-route for a while.
+    if(match.distanceKm > offRouteThreshold || match.headingMismatch){
+      // genuinely off the route right now — either physically far from any
+      // known segment, or heading the wrong way relative to the matched
+      // segment (e.g. missed a junction and carried on past it). Worth a
+      // fresh route from here, not just a timer tick. maybeRefreshRoute's
+      // own cooldown stops this from spamming the API if we stay off-route
+      // for a while.
       maybeRefreshRoute(lat, lng, now);
       $('boardStatus').textContent = t('gpsWeak');
       $('boardStatus').classList.remove('error');
