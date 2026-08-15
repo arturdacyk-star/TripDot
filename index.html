@@ -107,6 +107,13 @@
     background:none; border:2px solid #D8DEE8; color:#6b7688; font-family:'Baloo 2';
     font-weight:600; border-radius:14px; padding:10px; font-size:14px; cursor:pointer; width:100%;
   }
+  .diag-log-area{
+    width:100%; box-sizing:border-box; font-family:monospace; font-size:11px;
+    border:2px solid #D8DEE8; border-radius:12px; padding:8px; resize:vertical;
+    background:#F7F8FB; color:#3a4150;
+  }
+  .diag-log-row{display:flex; gap:8px; margin-top:8px;}
+  .diag-log-row .secondary-btn{width:auto; flex:1;}
   .status-msg{font-size:13px; text-align:center; margin-top:8px; min-height:16px; color:var(--asphalt);}
   .status-msg.error{color:var(--coral); font-weight:700;}
   .bottom-actions #resetBtn{background:#fff; border:2px solid #C7CEDA; color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.08);}
@@ -472,6 +479,16 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2 id="diagCardTitle">🛠️ Log z ostatniej podróży</h2>
+    <p class="hint" id="diagCardHint">Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.</p>
+    <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
+    <div class="diag-log-row">
+      <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
+      <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+    </div>
+  </div>
+
   <button class="primary-btn" id="optionsDoneBtn">Gotowe</button>
 </div>
 
@@ -562,6 +579,10 @@ const I18N = {
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
     straightLineLabel:'📏 Zawsze linia prosta',
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa.',
+    diagCardTitle:'🛠️ Log z ostatniej podróży',
+    diagCardHint:'Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.',
+    diagCopyBtn:'Kopiuj',
+    diagClearBtn:'Wyczyść',
     optionsDoneBtn:'Gotowe',
     statPercentLbl:'trasy',
     statKmLbl:'km zostało',
@@ -633,6 +654,10 @@ const I18N = {
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
     straightLineLabel:'📏 Always straight line',
     straightLineSub:"Don't calculate the real road route, even when the internet works.",
+    diagCardTitle:'🛠️ Last trip log',
+    diagCardHint:'Records off-route detections and recalculation attempts to help find the cause of a problem. Overwritten when a new trip starts.',
+    diagCopyBtn:'Copy',
+    diagClearBtn:'Clear',
     optionsDoneBtn:'Done',
     statPercentLbl:'of route',
     statKmLbl:'km left',
@@ -877,7 +902,8 @@ function checkForSavedTrip(){
       lastAcceptedProgress: maxProgress,
       lastPosition: null, lastTimestamp: 0, pendingJump: null
     };
-    routeRecalc = {pending:false, lastFetchAt: performance.now()};
+    routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+    logTripEvent('trip_resumed', {});
 
     $('resumeBanner').classList.add('hidden');
     $('setupScreen').classList.add('hidden');
@@ -953,14 +979,28 @@ async function fetchRoute(sLat, sLng, dLat, dLng){
   // route entirely — previously OSRM only ran when no Mapbox token was
   // configured at all, so a single failed Mapbox call during a mid-trip
   // recalculation silently dropped straight to straight-line mode for good
+  let mapboxError = null;
   if(MAPBOX_TOKEN){
     try{
       return await fetchRouteFromMapbox(sLat, sLng, dLat, dLng);
     } catch(e){
+      mapboxError = e && e.message ? e.message : String(e);
       console.warn('Mapbox routing failed, falling back to OSRM:', e);
     }
   }
-  return await fetchRouteFromOsrm(sLat, sLng, dLat, dLng);
+  try{
+    return await fetchRouteFromOsrm(sLat, sLng, dLat, dLng);
+  } catch(e){
+    const osrmError = e && e.message ? e.message : String(e);
+    // surface both real failure reasons together — this is what actually
+    // gets shown/logged when a mid-trip recalculation drops to straight
+    // line, instead of a generic "no route" that hides which provider(s)
+    // failed and why
+    const combined = new Error('Mapbox: ' + (mapboxError || 'n/a') + ' | OSRM: ' + osrmError);
+    combined.mapboxError = mapboxError;
+    combined.osrmError = osrmError;
+    throw combined;
+  }
 }
 
 /* ---------- BOARD BUILDING (always fits the container, no scrolling) ---------- */
@@ -1321,8 +1361,38 @@ $('confettiOverlay').addEventListener('click', dismissConfetti);
    żeby nie pomylić np. mostu z równoległą drogą serwisową pod spodem.
 */
 let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
-let routeRecalc = {pending:false, lastFetchAt: performance.now()};
+let routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
 let routeMeta = {segments:null};
+
+/* ---- lightweight diagnostic log, kept for the current trip only ----
+   Records off-route detections and route-recalculation attempts/results
+   (including the real HTTP status / error message, not just "failed"),
+   so a problem seen while driving can be copied out afterwards instead
+   of only living in the browser console nobody can see on a phone. */
+const TRIP_LOG_KEY = 'dalekoJeszcze_lastTripLog_v1';
+const TRIP_LOG_MAX_ENTRIES = 300;
+let tripLog = [];
+try{
+  const savedLog = localStorage.getItem(TRIP_LOG_KEY);
+  if(savedLog) tripLog = JSON.parse(savedLog);
+} catch(e){ tripLog = []; }
+
+function logTripEvent(type, data){
+  const entry = Object.assign({type, t: new Date().toISOString()}, data || {});
+  tripLog.push(entry);
+  if(tripLog.length > TRIP_LOG_MAX_ENTRIES) tripLog.splice(0, tripLog.length - TRIP_LOG_MAX_ENTRIES);
+  try{ localStorage.setItem(TRIP_LOG_KEY, JSON.stringify(tripLog)); } catch(e){}
+}
+
+function resetTripLog(){
+  tripLog = [];
+  try{ localStorage.removeItem(TRIP_LOG_KEY); } catch(e){}
+}
+
+function tripLogAsText(){
+  if(!tripLog.length) return '(brak zapisanych zdarzeń z ostatniej podróży)';
+  return tripLog.map(e => JSON.stringify(e)).join('\n');
+}
 
 function projectPointToSegment(lat, lng, a, b){
   const lat0 = (lat + a[0] + b[0]) / 3 * Math.PI / 180;
@@ -1412,6 +1482,20 @@ function indexForProgress(fraction){
   return idx;
 }
 
+// centralizes writes to the status line so a message meant to stay
+// visible for a while (e.g. "route recalculation failed") can't get wiped
+// out a second later by the very next routine GPS status update — that
+// was happening before, which is why a real failure could flash by
+// unnoticed while driving
+let boardStatusStickyUntil = 0;
+function setBoardStatus(text, isError, stickyMs){
+  const now = performance.now();
+  if(now < boardStatusStickyUntil) return;
+  $('boardStatus').textContent = text;
+  $('boardStatus').classList.toggle('error', !!isError);
+  boardStatusStickyUntil = stickyMs ? now + stickyMs : 0;
+}
+
 function acceptProgressFromGps(pos){
   const {latitude:lat, longitude:lng, accuracy = 30} = pos.coords;
   if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -1434,9 +1518,9 @@ function acceptProgressFromGps(pos){
       // fresh route from here, not just a timer tick. maybeRefreshRoute's
       // own cooldown stops this from spamming the API if we stay off-route
       // for a while.
+      logTripEvent('off_route_detected', {lat, lng, distanceKm: +match.distanceKm.toFixed(3), headingMismatch: !!match.headingMismatch});
       maybeRefreshRoute(lat, lng, now);
-      $('boardStatus').textContent = t('gpsWeak');
-      $('boardStatus').classList.remove('error');
+      setBoardStatus(t('gpsWeak'), false);
       return; // too far from any known segment — likely noisy fix, skip it
     }
   } else {
@@ -1476,8 +1560,7 @@ function acceptProgressFromGps(pos){
       gpsState.pendingJump = null; // confirmed by a second, similar reading — accept below
     } else {
       gpsState.pendingJump = {fraction, index:matchedIndex, at:now};
-      $('boardStatus').textContent = t('gpsWeak');
-      $('boardStatus').classList.remove('error');
+      setBoardStatus(t('gpsWeak'), false);
       return;
     }
   }
@@ -1490,8 +1573,7 @@ function acceptProgressFromGps(pos){
     gpsState.lastTimestamp = now;
     renderProgress(maxProgress);
     saveTripState();
-    $('boardStatus').textContent = '';
-    $('boardStatus').classList.remove('error');
+    setBoardStatus('', false);
     if(Math.round(maxProgress*100) >= 100){
       stopTracking();
       releaseWakeLock();
@@ -1502,15 +1584,34 @@ function acceptProgressFromGps(pos){
 
 // triggered only when we're actually off the route (or have no usable
 // match at all) — not on a blind schedule while happily on-route, since
-// that would just waste routing requests for no benefit. The cooldown
-// below only exists to stop repeated back-to-back fetches while stuck
-// off-route (e.g. parked), not to delay a normal, one-off recalculation.
-const ROUTE_REFRESH_COOLDOWN_MS = 20000;
+// that would just waste routing requests for no benefit.
+//
+// Two thresholds instead of one fixed cooldown:
+// - ROUTE_REFRESH_FLOOR_MS is a hard minimum gap between attempts, always
+//   enforced, so a jittery GPS fix can't fire off a burst of requests.
+// - ROUTE_REFRESH_DISTANCE_KM lets a recalc fire again as soon as we've
+//   moved meaningfully (e.g. reached a motorway exit) even if the floor
+//   hasn't fully elapsed — driving fast off-route used to mean the route
+//   you get back is already stale again by the time the old 20s cooldown
+//   allowed a retry.
+// - ROUTE_REFRESH_STALE_MS is the old 20s value, kept as a safety-net
+//   retry interval for when we're NOT moving (e.g. parked with no
+//   connectivity) — distance alone would never trigger a retry there.
+const ROUTE_REFRESH_FLOOR_MS = 8000;
+const ROUTE_REFRESH_STALE_MS = 20000;
+const ROUTE_REFRESH_DISTANCE_KM = 0.1;
 function maybeRefreshRoute(lat, lng, now){
   if(routeRecalc.pending) return;
-  if(now - routeRecalc.lastFetchAt < ROUTE_REFRESH_COOLDOWN_MS) return;
+  const sinceLast = now - routeRecalc.lastFetchAt;
+  if(sinceLast < ROUTE_REFRESH_FLOOR_MS) return;
+  const movedKm = routeRecalc.lastFetchPos ? haversine(routeRecalc.lastFetchPos.lat, routeRecalc.lastFetchPos.lng, lat, lng) : Infinity;
+  const movedEnough = movedKm >= ROUTE_REFRESH_DISTANCE_KM;
+  const staleEnough = sinceLast >= ROUTE_REFRESH_STALE_MS;
+  if(!movedEnough && !staleEnough) return;
+  logTripEvent('recalc_attempt', {lat, lng, sinceLastMs: Math.round(sinceLast), movedKm: +movedKm.toFixed(3), reason: movedEnough ? 'moved' : 'stale'});
   routeRecalc.pending = true;
   routeRecalc.lastFetchAt = now;
+  routeRecalc.lastFetchPos = {lat, lng};
   recalcRouteFromCurrentPosition(lat, lng);
 }
 
@@ -1540,10 +1641,12 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     gpsState.pendingJump = null;
     updateRouteModeIcon();
     saveTripState();
+    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length});
   } catch(e){
     // no route (e.g. offline) — don't get stuck waiting forever on a route
     // that no longer matches; fall back to straight-line distance from here
     console.warn('Route recalculation failed, switching to straight-line distance:', e);
+    logTripEvent('recalc_failed', {lat, lng, mapboxError: e && e.mapboxError, osrmError: e && e.osrmError, message: e && e.message});
     progressBase = maxProgress;
     usingRoute = false;
     routePoints = null;
@@ -1554,12 +1657,13 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     gpsState.pendingJump = null;
     updateRouteModeIcon();
     saveTripState();
-    $('boardStatus').textContent = t('routeRecalcFailed');
-    $('boardStatus').classList.add('error');
+    // sticky for its full 6s so the very next routine GPS status update
+    // can't immediately overwrite/hide it (this used to happen — the
+    // error could fire and vanish within a second, invisible to a driver)
+    setBoardStatus(t('routeRecalcFailed'), true, 6000);
     setTimeout(() => {
       if($('boardStatus').textContent === t('routeRecalcFailed')) {
-        $('boardStatus').textContent = '';
-        $('boardStatus').classList.remove('error');
+        setBoardStatus('', false);
       }
     }, 6000);
   } finally {
@@ -1874,7 +1978,9 @@ $('startBtn').addEventListener('click', async () => {
   routeMeta.segments = null;
   progressBase = 0;
   arrivalCelebrated = false;
-  routeRecalc = {pending:false, lastFetchAt: performance.now()};
+  routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+  resetTripLog();
+  logTripEvent('trip_started', {startLat, startLng, destLat, destLng});
 
   if(settings.forceStraightLine){
     totalDistance = haversine(startLat, startLng, destLat, destLng);
@@ -2086,7 +2192,8 @@ $('resetBtn').addEventListener('click', () => {
   progressBase = 0;
   arrivalCelebrated = false;
   dismissConfetti();
-  routeRecalc = {pending:false, lastFetchAt: performance.now()};
+  routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+  resetTripLog();
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
   $('destChip').classList.add('hidden');
   $('destAddress').value = '';
@@ -2161,6 +2268,10 @@ function applyStaticTexts(){
   $('tileCardHint').textContent = t('tileCardHint');
   $('straightLineLabel').textContent = t('straightLineLabel');
   $('straightLineSub').textContent = t('straightLineSub');
+  $('diagCardTitle').textContent = t('diagCardTitle');
+  $('diagCardHint').textContent = t('diagCardHint');
+  $('diagCopyBtn').textContent = t('diagCopyBtn');
+  $('diagClearBtn').textContent = t('diagClearBtn');
   $('optionsDoneBtn').textContent = t('optionsDoneBtn');
 
   $('statPercentLbl').textContent = t('statPercentLbl');
@@ -2189,6 +2300,7 @@ function openOptions(){
   $('tileCountRange').value = settings.tileCount;
   $('tileCountNum').value = settings.tileCount;
   $('forceStraightToggle').checked = settings.forceStraightLine;
+  $('diagLogArea').value = tripLogAsText();
 }
 function closeOptions(){
   $('optionsScreen').classList.add('hidden');
@@ -2221,6 +2333,22 @@ $('tileCountNum').addEventListener('change', () => {
 $('forceStraightToggle').addEventListener('change', () => {
   settings.forceStraightLine = $('forceStraightToggle').checked;
   updateThemePreview();
+});
+
+$('diagCopyBtn').addEventListener('click', async () => {
+  const area = $('diagLogArea');
+  area.value = tripLogAsText();
+  try{
+    await navigator.clipboard.writeText(area.value);
+  } catch(e){
+    // clipboard API can fail/be unavailable — fall back to select-and-copy
+    area.select();
+    try{ document.execCommand('copy'); } catch(e2){}
+  }
+});
+$('diagClearBtn').addEventListener('click', () => {
+  resetTripLog();
+  $('diagLogArea').value = tripLogAsText();
 });
 
 applyStaticTexts();
