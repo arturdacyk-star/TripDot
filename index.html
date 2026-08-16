@@ -504,6 +504,7 @@
       <div class="top-bar-btns">
         <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
         <button class="icon-btn" id="mapViewBtn" title="Pokaż trasę na mapie">🗺️</button>
+        <button class="icon-btn" id="boardGearBtn" title="Opcje">⚙️</button>
       </div>
       <div class="stat">
         <div class="num" id="statKm">–</div>
@@ -1404,7 +1405,14 @@ function projectPointToSegment(lat, lng, a, b){
   let tt = 0; if(len2 > 1e-12) tt = clamp((px*bx + py*by) / len2, 0, 1);
   const qx = bx*tt, qy = by*tt;
   const dx = px - qx, dy = py - qy;
-  return {t:tt, distanceKm: Math.sqrt(dx*dx + dy*dy) / 1000, alongKm: haversine(a[0],a[1],b[0],b[1]) * tt};
+  // dx/dy come from px/py/qx/qy, which are already in kilometers (lat/lng
+  // degree differences multiplied by km-per-degree factors above) — no
+  // further division needed. This used to divide by 1000 on top of that,
+  // silently reporting every off-route distance about 1000x smaller than
+  // reality (e.g. an actual 1.4km deviation came out as 0.0014km), which
+  // meant the off-route threshold (0.12km) was practically unreachable in
+  // normal driving and a route recalculation would never fire from this.
+  return {t:tt, distanceKm: Math.sqrt(dx*dx + dy*dy), alongKm: haversine(a[0],a[1],b[0],b[1]) * tt};
 }
 function buildSegmentMeta(){
   routeMeta.segments = [];
@@ -2193,7 +2201,11 @@ $('resetBtn').addEventListener('click', () => {
   arrivalCelebrated = false;
   dismissConfetti();
   routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
-  resetTripLog();
+  // NOTE: deliberately NOT clearing the diagnostic log here — this handler
+  // just returns you to the setup screen, and clearing now would erase the
+  // log for the trip you just finished before you get a chance to copy it
+  // from Options. It's reset instead at the moment a new trip actually
+  // starts (see trip_started above).
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
   $('destChip').classList.add('hidden');
   $('destAddress').value = '';
@@ -2293,8 +2305,14 @@ function setLang(lang){
   applyStaticTexts();
 }
 
+let optionsReturnScreen = 'setup';
 function openOptions(){
+  // remember whether we came from the setup screen or from an active trip
+  // (board screen), so Options can be reached mid-trip — e.g. to copy the
+  // diagnostic log — without having to end the trip first
+  optionsReturnScreen = $('boardScreen').classList.contains('hidden') ? 'setup' : 'board';
   $('setupScreen').classList.add('hidden');
+  $('boardScreen').classList.add('hidden');
   $('optionsScreen').classList.remove('hidden');
   renderThemeGrid();
   $('tileCountRange').value = settings.tileCount;
@@ -2304,11 +2322,23 @@ function openOptions(){
 }
 function closeOptions(){
   $('optionsScreen').classList.add('hidden');
-  $('setupScreen').classList.remove('hidden');
-  updateThemePreview();
+  if(optionsReturnScreen === 'board'){
+    $('boardScreen').classList.remove('hidden');
+    // the route map's container was hidden while Options was open — Leaflet
+    // needs an explicit invalidateSize (and a redraw) once it's visible
+    // again, same as when first switching into map view, or it can render
+    // blank/misaligned
+    if(boardViewMode !== 'board' && routeMap){
+      setTimeout(() => { routeMap.invalidateSize(); renderRouteMap(true); }, 0);
+    }
+  } else {
+    $('setupScreen').classList.remove('hidden');
+    updateThemePreview();
+  }
 }
 
 $('gearBtn').addEventListener('click', openOptions);
+$('boardGearBtn').addEventListener('click', openOptions);
 $('themePreviewEdit').addEventListener('click', openOptions);
 $('optionsBackBtn').addEventListener('click', closeOptions);
 $('optionsDoneBtn').addEventListener('click', closeOptions);
