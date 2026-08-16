@@ -114,8 +114,18 @@
   }
   .diag-log-row{display:flex; gap:8px; margin-top:8px;}
   .diag-log-row .secondary-btn{width:auto; flex:1;}
-  .history-slider-row{padding:6px 12px;}
-  .history-slider{width:100%;}
+  .history-scroll-row{display:flex; align-items:stretch; gap:2px;}
+  .history-scroll-box{
+    flex:1; max-height:172px; overflow-y:auto;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .history-vslider-wrap{width:28px; display:flex; align-items:center; justify-content:center; overflow:hidden;}
+  .history-vslider{
+    -webkit-appearance:none; appearance:none;
+    width:150px; height:24px;
+    transform:rotate(-90deg);
+    margin:0;
+  }
   .status-msg{font-size:13px; text-align:center; margin-top:8px; min-height:16px; color:var(--asphalt);}
   .status-msg.error{color:var(--coral); font-weight:700;}
   .bottom-actions #resetBtn{background:#fff; border:2px solid #C7CEDA; color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.08);}
@@ -483,7 +493,6 @@
 
   <div class="card">
     <h2 id="diagCardTitle">🛠️ Diagnostyka</h2>
-    <p class="hint" id="diagCardHint">Przydaje się tylko, gdy coś nie działa i trzeba to pokazać deweloperowi.</p>
     <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
     <div class="hidden" id="diagLogWrap">
       <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
@@ -586,7 +595,6 @@ const I18N = {
     straightLineLabel:'📏 Zawsze linia prosta',
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa.',
     diagCardTitle:'🛠️ Diagnostyka',
-    diagCardHint:'Przydaje się tylko, gdy coś nie działa i trzeba to pokazać deweloperowi.',
     diagShowBtn:'Pokaż log',
     diagCopyBtn:'Kopiuj',
     diagClearBtn:'Wyczyść',
@@ -662,7 +670,6 @@ const I18N = {
     straightLineLabel:'📏 Always straight line',
     straightLineSub:"Don't calculate the real road route, even when the internet works.",
     diagCardTitle:'🛠️ Diagnostics',
-    diagCardHint:'Only useful when something is not working and you need to show it to the developer.',
     diagShowBtn:'Show log',
     diagCopyBtn:'Copy',
     diagClearBtn:'Clear',
@@ -795,34 +802,48 @@ function showDestSuggestions(query){
   label.className = 'result-history-label';
   label.textContent = t('recentLabel');
   listEl.appendChild(label);
+
   // when browsing the plain recent list (no search query) and there are
-  // more than 3 saved entries, show a 3-item window with a slider to
-  // scroll through the rest instead of dumping up to 10 items at once
-  const useWindow = !q && list.length > 3;
-  const renderWindow = (offset) => {
-    listEl.querySelectorAll('.result-item').forEach(el => el.remove());
-    const windowList = useWindow ? list.slice(offset, offset + 3) : list;
-    windowList.forEach(r => {
-      const btn = document.createElement('button');
-      btn.className = 'result-item';
-      btn.innerHTML = '<b>🕘 ' + r.shortName + '</b>' + r.fullName;
-      btn.addEventListener('click', () => selectDestination(r));
-      listEl.appendChild(btn);
-    });
-  };
-  renderWindow(0);
-  if(useWindow){
-    const sliderRow = document.createElement('div');
-    sliderRow.className = 'history-slider-row';
+  // more than 3 saved entries, show a scrollable list (3 items tall) with
+  // a vertical slider that scrolls it smoothly — dragging moves through
+  // all up-to-10 entries continuously, not in fixed pages of 3
+  const useSlider = !q && list.length > 3;
+  const scrollBox = document.createElement('div');
+  scrollBox.className = useSlider ? 'history-scroll-box' : '';
+  list.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'result-item';
+    btn.innerHTML = '<b>🕘 ' + r.shortName + '</b>' + r.fullName;
+    btn.addEventListener('click', () => selectDestination(r));
+    scrollBox.appendChild(btn);
+  });
+
+  if(useSlider){
+    const row = document.createElement('div');
+    row.className = 'history-scroll-row';
+    row.appendChild(scrollBox);
+    const sliderWrap = document.createElement('div');
+    sliderWrap.className = 'history-vslider-wrap';
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0';
-    slider.max = String(list.length - 3);
+    slider.max = '1000';
     slider.value = '0';
-    slider.className = 'history-slider';
-    slider.addEventListener('input', () => renderWindow(parseInt(slider.value, 10)));
-    sliderRow.appendChild(slider);
-    listEl.appendChild(sliderRow);
+    slider.className = 'history-vslider';
+    slider.addEventListener('input', () => {
+      const frac = parseInt(slider.value, 10) / 1000;
+      scrollBox.scrollTop = frac * Math.max(0, scrollBox.scrollHeight - scrollBox.clientHeight);
+    });
+    // dragging/tapping the list itself should keep the slider in sync too
+    scrollBox.addEventListener('scroll', () => {
+      const range = scrollBox.scrollHeight - scrollBox.clientHeight;
+      slider.value = String(range > 0 ? Math.round((scrollBox.scrollTop / range) * 1000) : 0);
+    });
+    sliderWrap.appendChild(slider);
+    row.appendChild(sliderWrap);
+    listEl.appendChild(row);
+  } else {
+    listEl.appendChild(scrollBox);
   }
   listEl.classList.remove('hidden');
   $('setupStatus').textContent = '';
@@ -1077,9 +1098,22 @@ function buildGridTiles(wrap, theme, count){
         colIndex = 0;
         continue;
       }
-      // exactly one tile left and the row is already full — rather than a
-      // dangling turn tile with nothing after it, let this last tile
-      // extend the current row by one cell instead
+      // exactly one tile left and the row is already full. Widening this
+      // row by one cell (an earlier attempt) required widening the grid's
+      // column template too — which then misaligned every OTHER row, since
+      // they only ever place `cols` tiles into that now-wider template,
+      // leaving a blank column running down the whole board. Instead,
+      // borrow the last tile back out of this row and give it a proper
+      // new (shorter) row of its own, connected by a normal turn tile —
+      // every row then stays at or under `cols`, so the template never
+      // needs to widen and nothing misaligns.
+      cells.pop();
+      seq--;
+      colIndex--;
+      cells.push({type:'turn', row});
+      seq++;
+      row++;
+      colIndex = 0;
     }
     cells.push({type:'regular', row, col:colIndex});
     seq++;
@@ -1168,13 +1202,14 @@ function buildPathTiles(wrap, theme, count){
   const waveAmp = cellH * 0.30;
   const footstepAmp = (theme.layout === 'zigzag') ? cellH * 0.055 : 0; // small alternating footprint offset (dino only)
 
-  // worst case is the row-boundary pair (last tile of a row / first of the
-  // next): their vertical gap can shrink by the wobble plus up to two
-  // footstep offsets (consecutive tiles always alternate footstep sign) —
-  // keep the tile diameter safely below that so dots never touch, with
-  // extra breathing room right at that boundary
-  const worstGap = cellH - waveAmp - 2*footstepAmp;
-  const size = Math.max(6, Math.min(34, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.7))));
+  // worst case: two tiles in adjacent rows can wobble toward each other at
+  // the same time (one pushed down by +waveAmp, the other pushed up by
+  // -waveAmp), so the true minimum vertical gap loses waveAmp TWICE, not
+  // once — the previous single subtraction under-reserved space and let
+  // dots nearly touch between rows, especially at low tile counts (few
+  // rows → larger cellH → larger absolute waveAmp)
+  const worstGap = cellH - 2*waveAmp - 2*footstepAmp;
+  const size = Math.max(6, Math.min(34, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.6))));
 
   const centers = [];
   for(let i = 0; i < count; i++){
@@ -2366,7 +2401,6 @@ function applyStaticTexts(){
   $('straightLineLabel').textContent = t('straightLineLabel');
   $('straightLineSub').textContent = t('straightLineSub');
   $('diagCardTitle').textContent = t('diagCardTitle');
-  $('diagCardHint').textContent = t('diagCardHint');
   $('diagShowBtn').textContent = t('diagShowBtn');
   $('diagCopyBtn').textContent = t('diagCopyBtn');
   $('diagClearBtn').textContent = t('diagClearBtn');
