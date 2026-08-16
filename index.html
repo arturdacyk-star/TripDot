@@ -509,6 +509,7 @@
       <div class="top-bar-btns">
         <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
         <button class="icon-btn" id="mapViewBtn" title="Pokaż trasę na mapie">🗺️</button>
+        <button class="icon-btn" id="tileCountToggleBtn" title="Przełącz liczbę pól: 20 / 100">🔢</button>
       </div>
       <div class="stat">
         <div class="num" id="statKm">–</div>
@@ -1054,31 +1055,48 @@ function buildGridTiles(wrap, theme, count){
   let cols = Math.max(3, Math.round(Math.sqrt(count * (theme.gridAspectBias || 1))));
   cols = Math.min(cols, count);
 
-  // the grid interleaves a "turn" tile between every pair of rows, and those
-  // turn tiles are real counted route tiles too (see below) — so to make
-  // the tile-count slider mean the same total across every theme, we solve
-  // for how many rows fit `count` tiles TOTAL (regular + turns combined),
-  // not just `count` regular tiles with turns added on top
-  let rows = Math.max(1, Math.ceil(count / cols));
-  for(let i = 0; i < 6; i++){
-    const turns = Math.max(0, rows - 1);
-    const regularBudget = Math.max(rows, count - turns);
-    const newRows = Math.max(1, Math.ceil(regularBudget / cols));
-    if(newRows === rows) break;
-    rows = newRows;
+  // Place `count` tiles total (regular route tiles + the turn tiles that
+  // bridge rows) one at a time, snake-style, stopping exactly at `count`.
+  // This replaces an earlier fixed-point solver that tried to work out
+  // rows/turns from `count` up front — for some (count, cols) pairs that
+  // calculation oscillated forever and settled on an inconsistent state
+  // (e.g. a "last row" with zero tiles), which is what was causing the
+  // missing finish flag and, separately, mismatched row heights. Placing
+  // tiles directly and just stopping at `count` can't produce either
+  // problem — the board always ends exactly where it should, on a real
+  // tile, with every row the same height.
+  const cells = [];
+  let row = 0, colIndex = 0, seq = 0;
+  while(seq < count){
+    const remaining = count - seq;
+    if(colIndex >= cols){
+      if(remaining >= 2){
+        cells.push({type:'turn', row});
+        seq++;
+        row++;
+        colIndex = 0;
+        continue;
+      }
+      // exactly one tile left and the row is already full — rather than a
+      // dangling turn tile with nothing after it, let this last tile
+      // extend the current row by one cell instead
+    }
+    cells.push({type:'regular', row, col:colIndex});
+    seq++;
+    colIndex++;
   }
-  const turnsTotal = Math.max(0, rows - 1);
-  const regularCount = Math.max(rows, count - turnsTotal);
+  const rows = row + 1;
+  // usually `cols`, but the one-tile-left edge case above can widen the
+  // final row by one cell — grid columns must match the widest row used
+  const effectiveCols = cells.reduce((m, c) => c.type === 'regular' ? Math.max(m, c.col + 1) : m, cols);
 
   const colGap = count > 200 ? 1 : count > 80 ? 2 : 4;
-  wrap.style.rowGap = '0px';
+  // a small vertical gap too — previously 0, which made the turn tile
+  // connecting two rows visually fuse into the tiles directly above and
+  // below it, unlike the gap between every other pair of tiles
+  wrap.style.rowGap = colGap + 'px';
   wrap.style.columnGap = colGap + 'px';
-  wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-
-  // interleave a full-size "turn" row between every pair of tile rows —
-  // this is where the road visually bends, instead of a flat table grid.
-  // the turn cell is its own separate route tile (counted, lights up,
-  // hosts the car) — not part of the row's regular tiles.
+  wrap.style.gridTemplateColumns = `repeat(${effectiveCols}, 1fr)`;
   const rowTemplate = [];
   for(let r = 0; r < rows; r++){
     rowTemplate.push('1fr');
@@ -1087,49 +1105,42 @@ function buildGridTiles(wrap, theme, count){
   wrap.style.gridTemplateRows = rowTemplate.join(' ');
 
   const decoSize = Math.max(9, Math.min(18, Math.floor(140 / Math.sqrt(count))));
-  let seq = 0;
-  for(let row = 0; row < rows; row++){
-    const isLastRow = (row === rows - 1);
-    const tilesInRow = isLastRow ? (regularCount - row*cols) : cols;
-    for(let c = 0; c < tilesInRow; c++){
-      seq++;
-      const col = (row % 2 === 1) ? (cols - 1 - c) : c;
-      const tl = document.createElement('div');
+  cells.forEach((cell, i) => {
+    const seqNum = i + 1;
+    const tl = document.createElement('div');
+    tl.id = 'tile-' + seqNum;
+    if(cell.type === 'turn'){
+      tl.className = 'tile turn';
+      const turnCol = (cell.row % 2 === 0) ? effectiveCols : 1;
+      tl.style.gridColumn = turnCol;
+      tl.style.gridRow = (cell.row*2 + 2);
+    } else {
       tl.className = 'tile';
-      tl.id = 'tile-' + seq;
-      tl.style.gridColumn = (col+1);
-      tl.style.gridRow = (row*2 + 1);
-      if(seq === 1) tl.classList.add('start');
-      if(row === rows-1 && c === tilesInRow-1) tl.classList.add('finish');
-      wrap.appendChild(tl);
+      const visualCol = (cell.row % 2 === 1) ? (effectiveCols - 1 - cell.col) : cell.col;
+      tl.style.gridColumn = (visualCol + 1);
+      tl.style.gridRow = (cell.row*2 + 1);
     }
+    if(seqNum === 1) tl.classList.add('start');
+    if(seqNum === cells.length) tl.classList.add('finish');
+    wrap.appendChild(tl);
+  });
 
-    if(!isLastRow){
-      const turnCol = (row % 2 === 0) ? cols : 1;
-      seq++;
-      const turn = document.createElement('div');
-      turn.className = 'tile turn';
-      turn.id = 'tile-' + seq;
-      turn.style.gridColumn = turnCol;
-      turn.style.gridRow = (row*2 + 2);
-      wrap.appendChild(turn);
-
-      if(theme.decor && theme.decor.length && cols > 2){
-        const decorCol = clamp(1 + ((row*3 + 2) % (cols - 1)), 1, cols);
-        if(decorCol !== turnCol){
-          const deco = document.createElement('span');
-          deco.className = 'row-deco';
-          deco.textContent = theme.decor[row % theme.decor.length].e;
-          deco.style.fontSize = decoSize + 'px';
-          deco.style.gridColumn = decorCol;
-          deco.style.gridRow = (row*2 + 2);
-          deco.style.animationDelay = (row * 0.3) + 's';
-          wrap.appendChild(deco);
-        }
-      }
+  if(theme.decor && theme.decor.length && effectiveCols > 2){
+    for(let r = 0; r < rows - 1; r++){
+      const turnCol = (r % 2 === 0) ? effectiveCols : 1;
+      const decorCol = clamp(1 + ((r*3 + 2) % (effectiveCols - 1)), 1, effectiveCols);
+      if(decorCol === turnCol) continue;
+      const deco = document.createElement('span');
+      deco.className = 'row-deco';
+      deco.textContent = theme.decor[r % theme.decor.length].e;
+      deco.style.fontSize = decoSize + 'px';
+      deco.style.gridColumn = decorCol;
+      deco.style.gridRow = (r*2 + 2);
+      deco.style.animationDelay = (r * 0.3) + 's';
+      wrap.appendChild(deco);
     }
   }
-  boardTileCount = seq;
+  boardTileCount = cells.length;
 }
 
 function buildPathTiles(wrap, theme, count){
@@ -2238,6 +2249,16 @@ $('mapViewBtn').addEventListener('click', () => {
   // back — exactly the missing-car/blank-board symptom.
   if(boardViewMode !== 'map') buildBoard();
   renderProgress(maxProgress);
+});
+
+$('tileCountToggleBtn').addEventListener('click', () => {
+  // quick on-trip toggle between a short (20) and long (100) board, without
+  // opening Options — Options still shows/controls the actual current value
+  settings.tileCount = settings.tileCount === 20 ? 100 : 20;
+  $('themeSwitchPopover').classList.add('hidden');
+  buildBoard();
+  renderProgress(maxProgress);
+  saveTripState();
 });
 
 $('routeMapFitBtn').addEventListener('click', () => {
