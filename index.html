@@ -114,6 +114,8 @@
   }
   .diag-log-row{display:flex; gap:8px; margin-top:8px;}
   .diag-log-row .secondary-btn{width:auto; flex:1;}
+  .history-slider-row{padding:6px 12px;}
+  .history-slider{width:100%;}
   .status-msg{font-size:13px; text-align:center; margin-top:8px; min-height:16px; color:var(--asphalt);}
   .status-msg.error{color:var(--coral); font-weight:700;}
   .bottom-actions #resetBtn{background:#fff; border:2px solid #C7CEDA; color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.08);}
@@ -248,7 +250,7 @@
   #mapViewBtn.active{background:var(--coral); color:#fff;}
   .top-bar-btns{display:flex; gap:8px; align-self:center;}
   .theme-switch-popover{
-    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:50;
+    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:900;
     background:#fff; border-radius:16px; padding:10px; box-shadow:0 10px 24px rgba(36,48,61,.25);
     display:flex; gap:8px;
   }
@@ -480,12 +482,15 @@
   </div>
 
   <div class="card">
-    <h2 id="diagCardTitle">🛠️ Log z ostatniej podróży</h2>
-    <p class="hint" id="diagCardHint">Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.</p>
-    <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
-    <div class="diag-log-row">
-      <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
-      <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+    <h2 id="diagCardTitle">🛠️ Diagnostyka</h2>
+    <p class="hint" id="diagCardHint">Przydaje się tylko, gdy coś nie działa i trzeba to pokazać deweloperowi.</p>
+    <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
+    <div class="hidden" id="diagLogWrap">
+      <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
+      <div class="diag-log-row">
+        <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
+        <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+      </div>
     </div>
   </div>
 
@@ -504,7 +509,6 @@
       <div class="top-bar-btns">
         <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
         <button class="icon-btn" id="mapViewBtn" title="Pokaż trasę na mapie">🗺️</button>
-        <button class="icon-btn" id="boardGearBtn" title="Opcje">⚙️</button>
       </div>
       <div class="stat">
         <div class="num" id="statKm">–</div>
@@ -533,7 +537,7 @@
     </div>
 
     <div class="bottom-actions">
-      <button class="secondary-btn" id="resetBtn">🔄 Nowa podróż</button>
+      <button class="secondary-btn" id="resetBtn">🏁 Zakończ podróż</button>
     </div>
     <div class="status-msg" id="boardStatus"></div>
   </div>
@@ -580,14 +584,15 @@ const I18N = {
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
     straightLineLabel:'📏 Zawsze linia prosta',
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa.',
-    diagCardTitle:'🛠️ Log z ostatniej podróży',
-    diagCardHint:'Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.',
+    diagCardTitle:'🛠️ Diagnostyka',
+    diagCardHint:'Przydaje się tylko, gdy coś nie działa i trzeba to pokazać deweloperowi.',
+    diagShowBtn:'Pokaż log',
     diagCopyBtn:'Kopiuj',
     diagClearBtn:'Wyczyść',
     optionsDoneBtn:'Gotowe',
     statPercentLbl:'trasy',
     statKmLbl:'km zostało',
-    resetBtn:'🔄 Nowa podróż',
+    resetBtn:'🏁 Zakończ podróż',
     routeModeStraightTitle:'Dystans liczony w linii prostej',
     routeModeRouteTitle:'Dystans liczony po realnej trasie drogowej',
     msgStart:'Dopiero ruszyliśmy',
@@ -655,14 +660,15 @@ const I18N = {
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
     straightLineLabel:'📏 Always straight line',
     straightLineSub:"Don't calculate the real road route, even when the internet works.",
-    diagCardTitle:'🛠️ Last trip log',
-    diagCardHint:'Records off-route detections and recalculation attempts to help find the cause of a problem. Overwritten when a new trip starts.',
+    diagCardTitle:'🛠️ Diagnostics',
+    diagCardHint:'Only useful when something is not working and you need to show it to the developer.',
+    diagShowBtn:'Show log',
     diagCopyBtn:'Copy',
     diagClearBtn:'Clear',
     optionsDoneBtn:'Done',
     statPercentLbl:'of route',
     statKmLbl:'km left',
-    resetBtn:'🔄 New trip',
+    resetBtn:'🏁 End trip',
     routeModeStraightTitle:'Distance calculated as a straight line',
     routeModeRouteTitle:'Distance calculated along the real road route',
     msgStart:'Just getting started',
@@ -771,7 +777,7 @@ function addToDestHistory(r){
   try{
     let list = loadDestHistory().filter(h => h.fullName !== r.fullName);
     list.unshift({ shortName: r.shortName, fullName: r.fullName, lat: r.lat, lon: r.lon });
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 6)));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 10)));
   } catch(e){}
 }
 function normalizeForMatch(s){
@@ -788,13 +794,35 @@ function showDestSuggestions(query){
   label.className = 'result-history-label';
   label.textContent = t('recentLabel');
   listEl.appendChild(label);
-  list.forEach(r => {
-    const btn = document.createElement('button');
-    btn.className = 'result-item';
-    btn.innerHTML = '<b>🕘 ' + r.shortName + '</b>' + r.fullName;
-    btn.addEventListener('click', () => selectDestination(r));
-    listEl.appendChild(btn);
-  });
+  // when browsing the plain recent list (no search query) and there are
+  // more than 3 saved entries, show a 3-item window with a slider to
+  // scroll through the rest instead of dumping up to 10 items at once
+  const useWindow = !q && list.length > 3;
+  const renderWindow = (offset) => {
+    listEl.querySelectorAll('.result-item').forEach(el => el.remove());
+    const windowList = useWindow ? list.slice(offset, offset + 3) : list;
+    windowList.forEach(r => {
+      const btn = document.createElement('button');
+      btn.className = 'result-item';
+      btn.innerHTML = '<b>🕘 ' + r.shortName + '</b>' + r.fullName;
+      btn.addEventListener('click', () => selectDestination(r));
+      listEl.appendChild(btn);
+    });
+  };
+  renderWindow(0);
+  if(useWindow){
+    const sliderRow = document.createElement('div');
+    sliderRow.className = 'history-slider-row';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = String(list.length - 3);
+    slider.value = '0';
+    slider.className = 'history-slider';
+    slider.addEventListener('input', () => renderWindow(parseInt(slider.value, 10)));
+    sliderRow.appendChild(slider);
+    listEl.appendChild(sliderRow);
+  }
   listEl.classList.remove('hidden');
   $('setupStatus').textContent = '';
   $('setupStatus').classList.remove('error');
@@ -2064,6 +2092,11 @@ function renderThemeSwitchPopover(){
       buildBoard();
       renderProgress(maxProgress);
       saveTripState();
+      // if the route map is showing, its car icon otherwise wouldn't
+      // refresh until the next GPS fix — most noticeable in split view,
+      // where the mismatch (old vehicle emoji next to the new board
+      // theme) sits right next to the freshly-changed board
+      if(boardViewMode !== 'board') updateRouteMapCarPosition();
       $('themeSwitchPopover').classList.add('hidden');
     });
     pop.appendChild(btn);
@@ -2154,8 +2187,16 @@ function updateRouteMapCarPosition(){
   if(!routeMapCarMarker){
     const icon = L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
     routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
+    routeMapCarMarker._vehicleEmoji = theme.vehicle;
   } else {
     routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
+    // the marker previously kept whatever vehicle emoji it was created
+    // with — switching themes (e.g. car → boat) never updated it until
+    // the marker got recreated (new trip, or toggling map view off/on)
+    if(routeMapCarMarker._vehicleEmoji !== theme.vehicle){
+      routeMapCarMarker.setIcon(L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] }));
+      routeMapCarMarker._vehicleEmoji = theme.vehicle;
+    }
   }
 }
 
@@ -2188,8 +2229,15 @@ $('mapViewBtn').addEventListener('click', () => {
   $('themeSwitchPopover').classList.add('hidden');
   boardViewMode = boardViewMode === 'board' ? 'map' : boardViewMode === 'map' ? 'split' : 'board';
   applyBoardViewMode();
-  if(boardViewMode !== 'map') buildBoard(); // roadWrap was hidden (className got reset) — rebuild so tiles reappear correctly
-  if(boardViewMode !== 'board') renderProgress(maxProgress);
+  // buildBoard() rebuilds tiles from scratch whenever they're visible
+  // ('board' or 'split'), which wipes any 'current'/'done' markup — always
+  // follow it with renderProgress to reapply the vehicle icon, progress
+  // coloring, and the route map's car marker. These two used to have
+  // different, mismatched conditions, so returning from map view straight
+  // to plain board view rebuilt blank tiles and never put the vehicle icon
+  // back — exactly the missing-car/blank-board symptom.
+  if(boardViewMode !== 'map') buildBoard();
+  renderProgress(maxProgress);
 });
 
 $('routeMapFitBtn').addEventListener('click', () => {
@@ -2298,6 +2346,7 @@ function applyStaticTexts(){
   $('straightLineSub').textContent = t('straightLineSub');
   $('diagCardTitle').textContent = t('diagCardTitle');
   $('diagCardHint').textContent = t('diagCardHint');
+  $('diagShowBtn').textContent = t('diagShowBtn');
   $('diagCopyBtn').textContent = t('diagCopyBtn');
   $('diagClearBtn').textContent = t('diagClearBtn');
   $('optionsDoneBtn').textContent = t('optionsDoneBtn');
@@ -2321,40 +2370,23 @@ function setLang(lang){
   applyStaticTexts();
 }
 
-let optionsReturnScreen = 'setup';
 function openOptions(){
-  // remember whether we came from the setup screen or from an active trip
-  // (board screen), so Options can be reached mid-trip — e.g. to copy the
-  // diagnostic log — without having to end the trip first
-  optionsReturnScreen = $('boardScreen').classList.contains('hidden') ? 'setup' : 'board';
   $('setupScreen').classList.add('hidden');
-  $('boardScreen').classList.add('hidden');
   $('optionsScreen').classList.remove('hidden');
   renderThemeGrid();
   $('tileCountRange').value = settings.tileCount;
   $('tileCountNum').value = settings.tileCount;
   $('forceStraightToggle').checked = settings.forceStraightLine;
-  $('diagLogArea').value = tripLogAsText();
+  $('diagLogWrap').classList.add('hidden');
+  $('diagShowBtn').textContent = t('diagShowBtn');
 }
 function closeOptions(){
   $('optionsScreen').classList.add('hidden');
-  if(optionsReturnScreen === 'board'){
-    $('boardScreen').classList.remove('hidden');
-    // the route map's container was hidden while Options was open — Leaflet
-    // needs an explicit invalidateSize (and a redraw) once it's visible
-    // again, same as when first switching into map view, or it can render
-    // blank/misaligned
-    if(boardViewMode !== 'board' && routeMap){
-      setTimeout(() => { routeMap.invalidateSize(); renderRouteMap(true); }, 0);
-    }
-  } else {
-    $('setupScreen').classList.remove('hidden');
-    updateThemePreview();
-  }
+  $('setupScreen').classList.remove('hidden');
+  updateThemePreview();
 }
 
 $('gearBtn').addEventListener('click', openOptions);
-$('boardGearBtn').addEventListener('click', openOptions);
 $('themePreviewEdit').addEventListener('click', openOptions);
 $('optionsBackBtn').addEventListener('click', closeOptions);
 $('optionsDoneBtn').addEventListener('click', closeOptions);
@@ -2381,6 +2413,13 @@ $('forceStraightToggle').addEventListener('change', () => {
   updateThemePreview();
 });
 
+$('diagShowBtn').addEventListener('click', () => {
+  const wrap = $('diagLogWrap');
+  const willShow = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', !willShow);
+  $('diagShowBtn').textContent = willShow ? t('diagShowBtn') + ' ▲' : t('diagShowBtn');
+  if(willShow) $('diagLogArea').value = tripLogAsText();
+});
 $('diagCopyBtn').addEventListener('click', async () => {
   const area = $('diagLogArea');
   area.value = tripLogAsText();
