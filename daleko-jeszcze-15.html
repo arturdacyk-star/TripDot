@@ -1,0 +1,2413 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Daleko jeszcze? / Are we there yet?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<style>
+  :root{
+    --sky-top:#8ED0EE;
+    --sky-bottom:#E8F7FF;
+    --asphalt:#3A3F4B;
+    --asphalt-light:#4B5160;
+    --sun:#FFC93C;
+    --grass:#6FCF97;
+    --finish:#FF6B5B;
+    --coral:#FF6B5B;
+    --ink:#24303D;
+    --paper:#FFFFFF;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    font-family:'Nunito', sans-serif;
+    background:linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 45%, var(--sky-bottom) 100%);
+    color:var(--ink);
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    overflow-x:hidden;
+    transition:background .4s ease;
+  }
+  h1,h2{font-family:'Baloo 2', sans-serif; margin:0;}
+
+  .cloud{position:absolute; background:#fff; border-radius:50px; opacity:.85; filter:blur(0.5px);}
+  .cloud::before,.cloud::after{content:""; position:absolute; background:#fff; border-radius:50%;}
+  .c1{width:70px; height:26px; top:6%; left:8%;}
+  .c1::before{width:34px; height:34px; top:-16px; left:8px;}
+  .c1::after{width:26px; height:26px; top:-10px; left:38px;}
+  .c2{width:56px; height:20px; top:14%; right:10%;}
+  .c2::before{width:26px; height:26px; top:-12px; left:6px;}
+  .c2::after{width:20px; height:20px; top:-8px; left:30px;}
+
+  .screen{width:100%; max-width:480px; padding:20px; display:flex; flex-direction:column; align-items:center; position:relative; z-index:1;}
+  .hidden{display:none !important;}
+
+  .resume-banner{
+    width:100%; background:#FFF6E0; border:2px solid var(--sun); border-radius:16px;
+    padding:14px; margin-bottom:16px;
+  }
+  .resume-banner .rb-title{font-family:'Baloo 2'; font-weight:700; font-size:15px; margin-bottom:4px;}
+  .resume-banner .rb-text{font-size:13px; color:#6b7688; margin-bottom:10px;}
+  .resume-banner .rb-btns{display:flex; gap:8px;}
+  .resume-banner .rb-btns button{
+    flex:1; padding:10px; border-radius:12px; border:none; font-family:'Baloo 2'; font-weight:700; font-size:13px; cursor:pointer;
+  }
+  .rb-continue{background:var(--coral); color:#fff;}
+  .rb-dismiss{background:#fff; border:2px solid #E4E9F0 !important; color:#6b7688;}
+
+  .top-row{width:100%; display:flex; justify-content:center; align-items:center; position:relative; margin-bottom:2px; gap:8px;}
+  .icon-btn{
+    width:40px; height:40px; border-radius:50%;
+    background:rgba(255,255,255,.85); border:none; font-size:16px; cursor:pointer;
+    box-shadow:0 4px 10px rgba(36,48,61,.15); font-family:'Baloo 2'; font-weight:700;
+  }
+  .top-right-btns{position:absolute; right:0; top:0; display:flex; gap:8px;}
+  .badge{
+    background:var(--sun); color:var(--ink); font-family:'Baloo 2';
+    padding:4px 14px; border-radius:20px; font-size:13px; font-weight:600;
+    margin-bottom:10px; box-shadow:0 2px 0 rgba(0,0,0,.08);
+  }
+  .title{font-size:34px; font-weight:700; text-align:center; line-height:1.15; margin-bottom:6px;}
+  .title span{color:var(--coral);}
+  .subtitle{text-align:center; font-size:15px; color:#4a5568; margin-bottom:22px; max-width:360px;}
+
+  .card{
+    background:var(--paper); border-radius:22px; padding:20px 18px;
+    width:100%; box-shadow:0 10px 30px rgba(36,48,61,.12);
+    margin-bottom:16px;
+  }
+  .card h2{font-size:17px; margin-bottom:4px;}
+  .card p.hint{font-size:13px; color:#6b7688; margin:4px 0 14px 0; line-height:1.5;}
+  label{display:block; font-size:12px; font-weight:700; color:#6b7688; text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; margin-top:12px;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=number]{
+    width:100%; padding:12px 14px; border-radius:12px; border:2px solid #E4E9F0;
+    font-size:16px; font-family:'Nunito'; font-weight:700; color:var(--ink);
+    background:#F7F9FC;
+  }
+  input:focus{outline:none; border-color:var(--sun);}
+
+  .primary-btn{
+    width:100%; padding:16px; border:none; border-radius:16px;
+    background:var(--coral); color:#fff; font-family:'Baloo 2'; font-weight:600;
+    font-size:18px; cursor:pointer; box-shadow:0 6px 0 #d94a3c;
+    transition:transform .05s; flex-shrink:0;
+  }
+  .primary-btn:active{transform:translateY(4px); box-shadow:0 2px 0 #d94a3c;}
+  .primary-btn:disabled{background:#C7CDD8; box-shadow:0 6px 0 #A9B1BF; cursor:not-allowed;}
+  .primary-btn:disabled:active{transform:none;}
+  .secondary-btn{
+    background:none; border:2px solid #D8DEE8; color:#6b7688; font-family:'Baloo 2';
+    font-weight:600; border-radius:14px; padding:10px; font-size:14px; cursor:pointer; width:100%;
+  }
+  .diag-log-area{
+    width:100%; box-sizing:border-box; font-family:monospace; font-size:11px;
+    border:2px solid #D8DEE8; border-radius:12px; padding:8px; resize:vertical;
+    background:#F7F8FB; color:#3a4150;
+  }
+  .diag-log-row{display:flex; gap:8px; margin-top:8px;}
+  .diag-log-row .secondary-btn{width:auto; flex:1;}
+  .status-msg{font-size:13px; text-align:center; margin-top:8px; min-height:16px; color:var(--asphalt);}
+  .status-msg.error{color:var(--coral); font-weight:700;}
+  .bottom-actions #resetBtn{background:#fff; border:2px solid #C7CEDA; color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.08);}
+
+  .map-picker-overlay{
+    position:fixed; inset:0; background:#fff; z-index:1000;
+    display:flex; flex-direction:column;
+  }
+  .map-picker-overlay.hidden{display:none;}
+  .map-picker-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; font-family:'Baloo 2'; font-weight:700; font-size:16px;
+    border-bottom:1px solid #E4E9F0;
+  }
+  .map-picker-header button{
+    background:#F7F9FC; border:2px solid #E4E9F0; border-radius:10px;
+    width:32px; height:32px; font-size:14px; cursor:pointer;
+  }
+  #mapPickerMap{flex:1; min-height:0;}
+  #mapPickerLocate{
+    position:absolute; right:16px; bottom:110px; z-index:1200;
+    width:42px; height:42px; border-radius:50%; border:none;
+    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.25); font-size:18px; cursor:pointer;
+  }
+  #mapPickerLocate.locating{animation:mapLocateSpin 1s linear infinite;}
+  @keyframes mapLocateSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .map-picker-footer{padding:10px 16px 16px; border-top:1px solid #E4E9F0;}
+  .map-picker-name{font-size:13px; color:#5a6478; text-align:center; margin-bottom:8px; min-height:16px;}
+
+  .search-row{display:flex; gap:8px;}
+  .search-row input{flex:1;}
+  .search-btn{
+    flex-shrink:0; border:none; border-radius:12px; background:var(--asphalt); color:#fff;
+    font-family:'Baloo 2'; font-weight:600; font-size:14px; padding:0 16px; cursor:pointer;
+  }
+  .search-btn:disabled{opacity:.5;}
+
+  .search-wrap{position:relative;}
+  .results-list{
+    position:absolute; top:calc(100% + 8px); left:0; right:0; z-index:50;
+    background:var(--paper); border-radius:14px; padding:8px;
+    box-shadow:0 12px 28px rgba(36,48,61,.22);
+    max-height:260px; overflow-y:auto;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .result-item{
+    text-align:left; width:100%; border:2px solid #E4E9F0; background:#F7F9FC;
+    border-radius:12px; padding:10px 12px; font-family:'Nunito'; font-size:13px;
+    color:var(--ink); cursor:pointer; line-height:1.4;
+  }
+  .result-item:active{background:#EFF3F8;}
+  .result-item b{display:block; font-family:'Baloo 2'; font-size:14px; margin-bottom:1px;}
+  .result-history-label{font-size:11px; color:#8a93a3; font-weight:700; margin:2px 2px 4px; text-transform:uppercase; letter-spacing:.03em;}
+
+  .dest-chip, .start-current-row{
+    background:#EAFBF1; border:2px solid var(--grass); border-radius:12px;
+    padding:10px 12px; font-size:13px; display:flex; align-items:center; gap:8px;
+  }
+  .dest-chip{margin-top:12px;}
+  .start-current-row{background:#F7F9FC; border-color:#E4E9F0;}
+  .dest-chip .icon, .start-current-row .icon{font-size:18px;}
+  .dest-chip .txt, .start-current-row .txt{flex:1; line-height:1.35;}
+  .dest-chip b{display:block; font-family:'Baloo 2'; font-size:14px;}
+  .dest-chip .clear, .start-current-row button{background:none; border:none; color:#6b7688; font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
+  .start-search-area{margin-top:12px;}
+  .start-search-area .secondary-btn{margin-top:8px;}
+
+  .theme-preview-row{display:none;}
+  .theme-preview-row .emoji{font-size:22px;}
+  .theme-preview-row .txt{flex:1; font-family:'Baloo 2'; font-weight:600; font-size:14px;}
+  .theme-preview-row button{background:none; border:none; color:#6b7688; font-size:12px; text-decoration:underline; cursor:pointer;}
+
+  .options-header{width:100%; display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+  .back-btn{
+    background:#fff; border:none; width:40px; height:40px; border-radius:50%;
+    cursor:pointer; box-shadow:0 4px 10px rgba(36,48,61,.15);
+    display:flex; align-items:center; justify-content:center; color:var(--ink);
+  }
+  .options-title{font-family:'Baloo 2'; font-size:22px; font-weight:700;}
+
+  .lang-row{display:flex; gap:8px;}
+  .lang-btn{
+    flex:1; padding:10px; border-radius:12px; border:2px solid #E4E9F0; background:#F7F9FC;
+    font-family:'Baloo 2'; font-weight:700; font-size:14px; cursor:pointer; color:var(--ink);
+  }
+  .lang-btn.selected{border-color:var(--coral); background:#FFF1EF; color:var(--coral);}
+
+  .theme-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px;}
+  .theme-card{
+    border:2px solid #E4E9F0; background:#F7F9FC; border-radius:16px; padding:14px 10px;
+    text-align:center; cursor:pointer;
+  }
+  .theme-card.selected{border-color:var(--coral); background:#FFF1EF;}
+  .theme-card .em{font-size:28px; display:block; margin-bottom:4px;}
+  .theme-card .lb{font-family:'Baloo 2'; font-weight:600; font-size:13px;}
+  .theme-card .shape{font-size:10px; color:#8a93a3; margin-top:2px; display:block;}
+
+  .tile-count-row{display:flex; align-items:center; gap:10px; margin-top:6px;}
+  input[type=range]{flex:1; accent-color:var(--coral); height:6px;}
+  .tile-count-num{width:64px; text-align:center; padding:8px 4px; font-size:14px;}
+  .tile-count-hint{font-size:11px; color:#8a93a3; margin-top:6px;}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; margin-top:6px; gap:10px;}
+  .toggle-row .lb{font-family:'Baloo 2'; font-weight:600; font-size:14px;}
+  .toggle-row .sub{font-size:12px; color:#8a93a3; margin-top:2px;}
+  .switch{position:relative; width:48px; height:28px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch .slider{position:absolute; inset:0; background:#D8DEE8; border-radius:20px; cursor:pointer; transition:.2s;}
+  .switch .slider::before{content:""; position:absolute; width:22px; height:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 2px 4px rgba(0,0,0,.2);}
+  .switch input:checked + .slider{background:var(--coral);}
+  .switch input:checked + .slider::before{transform:translateX(20px);}
+
+  .screen-board{
+    height:100vh; height:100dvh; padding:10px 14px 12px;
+    overflow:hidden;
+  }
+  .board-decor{position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;}
+  .board-decor .d{position:absolute; will-change:transform;}
+  .board-decor .d.bob{animation:bob 3.2s ease-in-out infinite;}
+  .board-decor .d.swim{animation:swim 5.5s ease-in-out infinite alternate;}
+  .board-decor .d.sway{animation:sway 4s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+  @keyframes swim{0%{transform:translateX(-16px);}100%{transform:translateX(16px);}}
+  @keyframes sway{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(6deg);}}
+
+  .board-content{position:relative; z-index:1; width:100%; height:100%; display:flex; flex-direction:column; min-height:0;}
+
+  .top-bar{width:100%; display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-shrink:0;}
+  .stat{background:var(--paper); border-radius:14px; padding:7px 14px; box-shadow:0 6px 16px rgba(36,48,61,.1); text-align:center; min-width:78px;}
+  #themeSwitchBtn{font-size:18px; align-self:center;}
+  #mapViewBtn{font-size:18px; align-self:center;}
+  #mapViewBtn.active{background:var(--coral); color:#fff;}
+  .top-bar-btns{display:flex; gap:8px; align-self:center;}
+  .theme-switch-popover{
+    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:50;
+    background:#fff; border-radius:16px; padding:10px; box-shadow:0 10px 24px rgba(36,48,61,.25);
+    display:flex; gap:8px;
+  }
+  .theme-switch-popover.hidden{display:none;}
+  .theme-switch-popover button{
+    background:#F7F9FC; border:2px solid #E4E9F0; border-radius:12px; padding:8px 10px;
+    display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;
+    font-family:'Baloo 2'; font-size:10px; color:var(--ink); min-width:52px;
+  }
+  .theme-switch-popover button.active{border-color:var(--coral); background:#FFF0EE;}
+  .theme-switch-popover button .em{font-size:20px;}
+  .stat .num{font-family:'Baloo 2'; font-size:19px; font-weight:700; color:var(--coral); line-height:1.1;}
+  .stat .lbl{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#8a93a3; font-weight:700;}
+
+  .progress-outer{width:100%; background:#fff; border-radius:14px; padding:9px 12px; box-shadow:0 6px 16px rgba(36,48,61,.1); margin-bottom:8px; flex-shrink:0;}
+  .progress-bar-track{width:100%; height:10px; background:#E4E9F0; border-radius:10px; overflow:hidden;}
+  .progress-bar-fill{height:100%; width:0%; background:linear-gradient(90deg, var(--grass), #57C77E); border-radius:10px; transition:width .6s ease;}
+  .progress-msg-row{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:6px;}
+  .progress-msg{font-family:'Baloo 2'; font-weight:600; font-size:13px; color:var(--asphalt);}
+  .arrival-banner{
+    display:none; align-items:center; justify-content:center; gap:10px;
+    margin-top:8px; padding:10px 14px; border-radius:14px;
+    background:linear-gradient(135deg,#1a1a1a,#333); color:#fff;
+    font-family:'Baloo 2'; font-weight:700; font-size:16px; text-align:center;
+  }
+  .arrival-banner.show{display:flex;}
+  .arrival-banner .flag{display:inline-block; font-size:26px; animation:flagWave 0.6s ease-in-out infinite alternate;}
+  @keyframes flagWave{0%{transform:rotate(-8deg);}100%{transform:rotate(10deg);}}
+  .route-mode-icon{font-size:15px; line-height:1;}
+
+  .road-wrap{
+    width:100%; flex:1; min-height:0; background:var(--asphalt); border-radius:18px; padding:8px;
+    box-shadow:0 10px 30px rgba(36,48,61,.25); transition:background .4s ease;
+    position:relative;
+  }
+  .route-map-wrap{
+    width:100%; flex:1; min-height:0; border-radius:18px; overflow:hidden;
+    box-shadow:0 10px 30px rgba(36,48,61,.25); position:relative;
+  }
+  #routeMapCanvas{width:100%; height:100%;}
+  #routeMapFitBtn{
+    position:absolute; right:10px; bottom:10px; z-index:500;
+    width:38px; height:38px; border-radius:50%; border:none;
+    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
+  }
+  .route-map-car-icon{font-size:22px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
+  .tile{
+    position:relative; border-radius:5px;
+    background:var(--asphalt-light);
+    display:flex; align-items:center; justify-content:center;
+    transition:background .3s ease, transform .2s ease;
+  }
+  .tile.done{background:var(--grass);}
+  .tile.start{background:var(--sun);}
+  .tile.finish{background:repeating-conic-gradient(#1a1a1a 0% 25%, #fff 0% 50%) 0 0/50% 50%;}
+  .tile.current{transform:scale(1.25); z-index:2; box-shadow:0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.35);}
+  .tile .car{line-height:1;}
+  .car.car-arrived-spin{animation:carArrivalSpin 1.4s cubic-bezier(.34,1.56,.64,1) forwards;}
+  @keyframes carArrivalSpin{
+    0%{transform:scale(1) rotate(0deg) translateY(0);}
+    20%{transform:scale(1.3) rotate(300deg) translateY(-16px);}
+    40%{transform:scale(1.3) rotate(600deg) translateY(-16px);}
+    60%{transform:scale(1.3) rotate(900deg) translateY(-10px);}
+    80%{transform:scale(1.2) rotate(1080deg) translateY(-14px);}
+    100%{transform:scale(1.15) rotate(1080deg) translateY(0);}
+  }
+
+  .confetti-overlay{position:fixed; inset:0; z-index:400; overflow:hidden; cursor:pointer;}
+  .confetti-overlay.hidden{display:none;}
+  .confetti-piece{
+    position:absolute; top:-20px; width:8px; height:14px; opacity:.9;
+    animation-name:confettiFall; animation-timing-function:linear; animation-fill-mode:forwards;
+  }
+  @keyframes confettiFall{
+    0%{transform:translateY(0) rotate(0deg); opacity:1;}
+    100%{transform:translateY(115vh) rotate(600deg); opacity:.9;}
+  }
+
+  .row-deco{
+    align-self:center; justify-self:center; opacity:.45; line-height:1;
+    pointer-events:none; animation:decoSway 4s ease-in-out infinite;
+  }
+  @keyframes decoSway{0%,100%{transform:translateX(-4px);}50%{transform:translateX(4px);}}
+
+  .tile-path{
+    position:absolute; border-radius:50%; background:var(--asphalt-light);
+    transition:background .3s ease, transform .2s ease;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tile-path.done{background:var(--grass);}
+  .tile-path.start{background:var(--sun);}
+  .tile-path.finish{background:repeating-conic-gradient(#1a1a1a 0% 25%, #fff 0% 50%) 0 0/50% 50%;}
+  .tile-path.current{transform:scale(1.4) !important; z-index:2; box-shadow:0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.35);}
+  .tile-path .car{line-height:1;}
+
+  .bottom-actions{width:100%; margin-top:8px; flex-shrink:0;}
+
+  footer.note{font-size:11px; color:#5a6478; text-align:center; margin:18px 0 6px 0; line-height:1.6; opacity:.8;}
+
+  @media (prefers-reduced-motion: reduce){
+    .progress-bar-fill, .tile, .tile-path, .board-decor .d{transition:none; animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="cloud c1"></div>
+<div class="cloud c2"></div>
+
+<!-- SETUP SCREEN -->
+<div class="screen" id="setupScreen">
+
+  <div class="top-row">
+    <div class="badge" id="badgeText">🚗 GRA W PODRÓŻ</div>
+    <div class="top-right-btns">
+      <button class="icon-btn" id="langQuickBtn" title="Język / Language">PL</button>
+      <button class="icon-btn" id="gearBtn" title="Opcje">⚙️</button>
+    </div>
+  </div>
+  <div class="title" id="titleText">Daleko <span>jeszcze?</span></div>
+  <div class="subtitle" id="subtitleText">Ustaw cel podróży, a droga zamieni się w planszę — pole po polu, aż dojedziecie.</div>
+
+  <div class="resume-banner hidden" id="resumeBanner">
+    <div class="rb-title" id="resumeTitle">▶️ Masz zapisaną podróż</div>
+    <div class="rb-text" id="resumeText"></div>
+    <div class="rb-btns">
+      <button class="rb-continue" id="resumeContinueBtn">Kontynuuj</button>
+      <button class="rb-dismiss" id="resumeDismissBtn">Zacznij nową</button>
+    </div>
+  </div>
+
+  <div class="theme-preview-row" id="themePreviewRow">
+    <div class="emoji" id="themePreviewEmoji">🚦</div>
+    <div class="txt" id="themePreviewText">Motyw: Droga · 100 pól</div>
+    <button id="themePreviewEdit">zmień</button>
+  </div>
+
+  <div id="setupFormArea">
+  <div class="card">
+    <h2 id="startCardTitle">🚦 Skąd startujemy?</h2>
+    <div class="start-current-row" id="startCurrentRow">
+      <div class="icon">📍</div>
+      <div class="txt" id="startCurrentText">Twoja aktualna lokalizacja</div>
+      <button id="startChangeBtn">zmień</button>
+    </div>
+    <div class="start-search-area hidden" id="startSearchArea">
+      <div class="search-wrap">
+        <div class="search-row">
+          <input type="text" id="startAddress" placeholder="np. Dom, ul. Kwiatowa 5">
+          <button class="search-btn" id="startSearchBtn">Szukaj</button>
+        </div>
+        <div class="results-list hidden" id="startResultsList"></div>
+      </div>
+      <button class="secondary-btn" id="startUseGpsBtn">📍 Użyj aktualnej lokalizacji</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="destCardTitle">🎯 Dokąd jedziemy?</h2>
+    <label for="destAddress" id="destAddressLabel">Adres celu</label>
+    <div class="search-wrap">
+      <div class="search-row">
+        <input type="text" id="destAddress" placeholder="np. Zakopane, Krupówki 10">
+        <button class="search-btn" id="searchBtn">Szukaj</button>
+      </div>
+      <div class="results-list hidden" id="resultsList"></div>
+    </div>
+    <button class="secondary-btn" id="mapPickBtn" style="margin-top:8px;">📍 <span id="mapPickBtnText">Wskaż punkt na mapie</span></button>
+    <div class="dest-chip hidden" id="destChip">
+      <div class="icon">📍</div>
+      <div class="txt"><b id="destChipName"></b><span id="destChipAddr"></span></div>
+      <button class="clear" id="destClearBtn">zmień</button>
+    </div>
+  </div>
+
+  <button class="primary-btn" id="startBtn" disabled>Ustal start i jedziemy! 🚦</button>
+  <div class="status-msg" id="setupStatus"></div>
+
+  <footer class="note" id="setupFooterNote">
+    Aplikacja użyje Twojej obecnej pozycji GPS jako punktu startowego i policzy trasę do celu.
+  </footer>
+  </div>
+</div>
+
+<!-- OPTIONS SCREEN -->
+<div class="screen hidden" id="optionsScreen">
+  <div class="options-header">
+    <button class="back-btn" id="optionsBackBtn" aria-label="Wróć">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="options-title" id="optionsTitle">Opcje</div>
+  </div>
+
+  <div class="card">
+    <h2 id="langCardTitle">🌐 Język</h2>
+    <div class="lang-row">
+      <button class="lang-btn" id="langBtnPl">Polski</button>
+      <button class="lang-btn" id="langBtnEn">English</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="themeCardTitle">🎨 Motyw planszy</h2>
+    <p class="hint" id="themeCardHint">Każdy motyw ma inny kształt trasy i inne postacie.</p>
+    <div class="theme-grid" id="themeGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="tileCardTitle">🔢 Liczba pól trasy</h2>
+    <p class="hint" id="tileCardHint">Od 10 (krótka gra) do 1000 (długa trasa). Domyślnie 100.</p>
+    <div class="tile-count-row">
+      <input type="range" id="tileCountRange" min="10" max="300" step="10" value="100">
+      <input type="number" id="tileCountNum" class="tile-count-num" min="10" max="300" value="100">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toggle-row">
+      <div>
+        <div class="lb" id="straightLineLabel">📏 Zawsze linia prosta</div>
+        <div class="sub" id="straightLineSub">Nie licz realnej trasy drogowej, nawet gdy internet działa.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="forceStraightToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="diagCardTitle">🛠️ Log z ostatniej podróży</h2>
+    <p class="hint" id="diagCardHint">Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.</p>
+    <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
+    <div class="diag-log-row">
+      <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
+      <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+    </div>
+  </div>
+
+  <button class="primary-btn" id="optionsDoneBtn">Gotowe</button>
+</div>
+
+<!-- BOARD SCREEN -->
+<div class="screen screen-board hidden" id="boardScreen">
+  <div class="board-decor" id="boardDecor"></div>
+  <div class="board-content">
+    <div class="top-bar">
+      <div class="stat">
+        <div class="num" id="statPercent">0%</div>
+        <div class="lbl" id="statPercentLbl">trasy</div>
+      </div>
+      <div class="top-bar-btns">
+        <button class="icon-btn" id="themeSwitchBtn" title="Zmień motyw planszy">🎨</button>
+        <button class="icon-btn" id="mapViewBtn" title="Pokaż trasę na mapie">🗺️</button>
+        <button class="icon-btn" id="boardGearBtn" title="Opcje">⚙️</button>
+      </div>
+      <div class="stat">
+        <div class="num" id="statKm">–</div>
+        <div class="lbl" id="statKmLbl">km zostało</div>
+      </div>
+    </div>
+    <div class="theme-switch-popover hidden" id="themeSwitchPopover"></div>
+
+    <div class="progress-outer">
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill"></div></div>
+      <div class="progress-msg-row">
+        <div class="progress-msg" id="progressMsg">Jedziemy!</div>
+        <span class="route-mode-icon" id="routeModeIcon" title=""></span>
+      </div>
+      <div class="arrival-banner" id="arrivalBanner">
+        <span class="flag">🏁</span><span id="arrivalBannerText"></span><span class="flag">🏁</span>
+      </div>
+    </div>
+
+    <div class="confetti-overlay hidden" id="confettiOverlay"></div>
+
+    <div class="road-wrap" id="roadWrap"></div>
+    <div class="route-map-wrap hidden" id="routeMapWrap">
+      <div id="routeMapCanvas"></div>
+      <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⤢</button>
+    </div>
+
+    <div class="bottom-actions">
+      <button class="secondary-btn" id="resetBtn">🔄 Nowa podróż</button>
+    </div>
+    <div class="status-msg" id="boardStatus"></div>
+  </div>
+</div>
+
+<div class="map-picker-overlay hidden" id="mapPickerOverlay">
+  <div class="map-picker-header">
+    <span id="mapPickerTitle">Wskaż cel na mapie</span>
+    <button id="mapPickerClose">✕</button>
+  </div>
+  <div id="mapPickerMap"></div>
+  <button id="mapPickerLocate" title="Moja lokalizacja">🎯</button>
+  <div class="map-picker-footer">
+    <div class="map-picker-name" id="mapPickerName"></div>
+    <button class="primary-btn" id="mapPickerConfirm" disabled>Zatwierdź ten punkt</button>
+  </div>
+</div>
+
+<script>
+/* ---------- TRANSLATIONS ---------- */
+const I18N = {
+  pl: {
+    badge:'🚗 GRA W PODRÓŻ',
+    titleHtml:'Daleko <span>jeszcze?</span>',
+    subtitle:'Ustaw cel podróży, a droga zamieni się w planszę — pole po polu, aż dojedziecie.',
+    themePrefix:'Motyw:', tilesSuffix:'pól', straightSuffix:'linia prosta',
+    change:'zmień',
+    startCardTitle:'🚦 Skąd startujemy?',
+    startCurrentGps:'Twoja aktualna lokalizacja',
+    startUseGps:'📍 Użyj aktualnej lokalizacji',
+    startAddressPlaceholder:'np. Dom, ul. Kwiatowa 5',
+    destCardTitle:'🎯 Dokąd jedziemy?',
+    destAddressLabel:'Adres celu',
+    destAddressPlaceholder:'np. Zakopane, Krupówki 10',
+    searchBtn:'Szukaj',
+    startBtn:'Ustal start i jedziemy! 🚦',
+    setupFooterNote:'Aplikacja użyje wybranego punktu startowego i policzy trasę do celu.',
+    optionsTitle:'Opcje',
+    langCardTitle:'🌐 Język',
+    langPl:'Polski', langEn:'English',
+    themeCardTitle:'🎨 Motyw planszy',
+    themeCardHint:'Każdy motyw ma inny kształt trasy i inne postacie.',
+    tileCardTitle:'🔢 Liczba pól trasy',
+    tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
+    straightLineLabel:'📏 Zawsze linia prosta',
+    straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa.',
+    diagCardTitle:'🛠️ Log z ostatniej podróży',
+    diagCardHint:'Zapisuje zjazdy z trasy i próby przeliczenia, żeby pomóc znaleźć przyczynę problemu. Zostaje nadpisany przy nowej podróży.',
+    diagCopyBtn:'Kopiuj',
+    diagClearBtn:'Wyczyść',
+    optionsDoneBtn:'Gotowe',
+    statPercentLbl:'trasy',
+    statKmLbl:'km zostało',
+    resetBtn:'🔄 Nowa podróż',
+    routeModeStraightTitle:'Dystans liczony w linii prostej',
+    routeModeRouteTitle:'Dystans liczony po realnej trasie drogowej',
+    msgStart:'Dopiero ruszyliśmy',
+    msgGo:'Jedziemy!',
+    msgHalf:'Ponad połowa za nami! 💪',
+    msgAlmost:'Prawie na miejscu!',
+    msgDone:'🎉 Dojechaliśmy',
+    msgDoneTo:'do:',
+    errFillDest:'Wpisz adres celu.',
+    errFillStart:'Wpisz adres startowy.',
+    errNoResults:'Nic nie znaleziono — spróbuj dokładniejszego adresu.',
+    errSearchFail:'Błąd wyszukiwania',
+    errCheckNet:'Sprawdź internet i spróbuj ponownie.',
+    errPickDest:'Najpierw wybierz cel z listy.',
+    statusLocating:'Namierzam pozycję startową…',
+    statusRouting:'Liczę trasę po drogach…',
+    errAlreadyThere:'Start i cel są zbyt blisko siebie.',
+    errGps:'Nie można odczytać GPS:',
+    errGpsCheck:'Sprawdź zgodę na lokalizację.',
+    errNoGeoSupport:'Ta przeglądarka nie obsługuje GPS.',
+    searching:'Szukam…',
+    gpsWaiting:'Czekam na stabilny sygnał GPS…',
+    gpsWeak:'Sygnał GPS jest chwilowo niedokładny…',
+    routeRecalcFailed:'Nie udało się przeliczyć trasy — liczę odległość w linii prostej.',
+    resumeTitle:'▶️ Masz zapisaną podróż',
+    resumeContinue:'Kontynuuj',
+    resumeNew:'Zacznij nową',
+    resumeToPrefix:'do', resumeDonePct:'ukończono',
+    recentLabel:'Ostatnio wybierane',
+    mapPickBtnText:'Wskaż punkt na mapie',
+    mapPickerTitle:'Wskaż cel na mapie',
+    mapPickerConfirm:'Zatwierdź ten punkt',
+    mapViewShowTitle:'Pokaż trasę na mapie',
+    mapViewSplitTitle:'Pokaż planszę i mapę razem',
+    mapViewHideTitle:'Wróć do planszy',
+    themes:{
+      road:{label:'Droga', shape:'siatka wężowa'},
+      forest:{label:'Las', shape:'wąska serpentyna'},
+      water:{label:'Woda', shape:'meandrująca rzeka'},
+      dino:{label:'Dinozaury', shape:'trop dinozaura'}
+    }
+  },
+  en: {
+    badge:'🚗 ROAD TRIP GAME',
+    titleHtml:'Are we <span>there yet?</span>',
+    subtitle:'Set your destination and the road turns into a board — tile by tile, until you arrive.',
+    themePrefix:'Theme:', tilesSuffix:'tiles', straightSuffix:'straight line',
+    change:'change',
+    startCardTitle:'🚦 Where are we starting from?',
+    startCurrentGps:'Your current location',
+    startUseGps:'📍 Use current location',
+    startAddressPlaceholder:'e.g. Home, Main Street 5',
+    destCardTitle:'🎯 Where are we going?',
+    destAddressLabel:'Destination address',
+    destAddressPlaceholder:'e.g. Central Park, New York',
+    searchBtn:'Search',
+    startBtn:"Set start and let's go! 🚦",
+    setupFooterNote:'The app will use the chosen starting point and calculate the route to your destination.',
+    optionsTitle:'Options',
+    langCardTitle:'🌐 Language',
+    langPl:'Polski', langEn:'English',
+    themeCardTitle:'🎨 Board theme',
+    themeCardHint:'Each theme has a different track shape and characters.',
+    tileCardTitle:'🔢 Number of route tiles',
+    tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
+    straightLineLabel:'📏 Always straight line',
+    straightLineSub:"Don't calculate the real road route, even when the internet works.",
+    diagCardTitle:'🛠️ Last trip log',
+    diagCardHint:'Records off-route detections and recalculation attempts to help find the cause of a problem. Overwritten when a new trip starts.',
+    diagCopyBtn:'Copy',
+    diagClearBtn:'Clear',
+    optionsDoneBtn:'Done',
+    statPercentLbl:'of route',
+    statKmLbl:'km left',
+    resetBtn:'🔄 New trip',
+    routeModeStraightTitle:'Distance calculated as a straight line',
+    routeModeRouteTitle:'Distance calculated along the real road route',
+    msgStart:'Just getting started',
+    msgGo:"We're on our way!",
+    msgHalf:'Over halfway there! 💪',
+    msgAlmost:'Almost there!',
+    msgDone:'🎉 We made it',
+    msgDoneTo:'to:',
+    errFillDest:'Enter a destination address.',
+    errFillStart:'Enter a starting address.',
+    errNoResults:'Nothing found — try a more precise address.',
+    errSearchFail:'Search error',
+    errCheckNet:'Check your internet connection and try again.',
+    errPickDest:'First pick a destination from the list.',
+    statusLocating:'Finding starting position…',
+    statusRouting:'Calculating the road route…',
+    errAlreadyThere:'Start and destination are too close together.',
+    errGps:'Could not read GPS:',
+    errGpsCheck:'Check your location permission.',
+    errNoGeoSupport:"This browser doesn't support GPS.",
+    searching:'Searching…',
+    gpsWaiting:'Waiting for a stable GPS signal…',
+    gpsWeak:'GPS signal is temporarily inaccurate…',
+    routeRecalcFailed:"Couldn't recalculate the route — using straight-line distance instead.",
+    resumeTitle:'▶️ You have a saved trip',
+    resumeContinue:'Continue',
+    resumeNew:'Start new',
+    resumeToPrefix:'to', resumeDonePct:'complete',
+    recentLabel:'Recently selected',
+    mapPickBtnText:'Pick a point on the map',
+    mapPickerTitle:'Pick a destination on the map',
+    mapPickerConfirm:'Confirm this point',
+    mapViewShowTitle:'Show route on map',
+    mapViewSplitTitle:'Show board and map together',
+    mapViewHideTitle:'Back to board',
+    themes:{
+      road:{label:'Road', shape:'snake grid'},
+      forest:{label:'Forest', shape:'narrow switchback'},
+      water:{label:'Water', shape:'meandering river'},
+      dino:{label:'Dinosaurs', shape:'dino footprints'}
+    }
+  }
+};
+
+const THEME_STYLE = {
+  road:  { emoji:'🚦', layout:'grid', gridAspectBias:1,
+    bgTop:'#8ED0EE', bgBottom:'#E8F7FF', trackBg:'#3A3F4B', trackBgLight:'#4B5160',
+    tileDone:'#6FCF97', startColor:'#FFC93C', finishColor:'#FF6B5B',
+    vehicle:'🚗', startIcon:'🚦', finishIcon:'🏁',
+    decor:[{e:'☁️',a:'bob'},{e:'🐦',a:'swim'},{e:'☁️',a:'bob'},{e:'🌤️',a:'bob'}] },
+  forest:{ emoji:'🌲', layout:'grid', gridAspectBias:0.6,
+    bgTop:'#BFE6C4', bgBottom:'#EAF7EA', trackBg:'#5B4632', trackBgLight:'#6E5940',
+    tileDone:'#8BC34A', startColor:'#FFD54F', finishColor:'#795548',
+    vehicle:'🦊', startIcon:'🌳', finishIcon:'🏕️',
+    decor:[{e:'🌳',a:'sway'},{e:'🦋',a:'swim'},{e:'🍃',a:'bob'},{e:'🌳',a:'sway'}] },
+  water: { emoji:'🌊', layout:'wave',
+    bgTop:'#7EC8E3', bgBottom:'#DFF6FF', trackBg:'#0B4F6C', trackBgLight:'#137390',
+    tileDone:'#39B6E0', startColor:'#FFD166', finishColor:'#EF476F',
+    vehicle:'⛵', startIcon:'⚓', finishIcon:'🏝️',
+    decor:[{e:'🐟',a:'swim'},{e:'🐬',a:'swim'},{e:'🐠',a:'swim'},{e:'🪸',a:'bob'}] },
+  dino:  { emoji:'🦕', layout:'zigzag',
+    bgTop:'#C9D68B', bgBottom:'#EFF3D8', trackBg:'#4B3A2A', trackBgLight:'#5E4A36',
+    tileDone:'#9CCC65', startColor:'#F2C14E', finishColor:'#D64545',
+    vehicle:'🦖', startIcon:'🥚', finishIcon:'🌋',
+    decor:[{e:'🌋',a:'bob'},{e:'🌿',a:'sway'},{e:'🦴',a:'bob'},{e:'🌿',a:'sway'}] }
+};
+
+function detectDefaultLang(){
+  try{
+    const langs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ''];
+    return langs.some(l => l.toLowerCase().startsWith('pl')) ? 'pl' : 'en';
+  } catch(e){ return 'en'; }
+}
+let settings = { theme:'road', tileCount:100, forceStraightLine:false, lang: detectDefaultLang() };
+
+function t(key){ return I18N[settings.lang][key]; }
+function themeInfo(id){ return { ...THEME_STYLE[id], ...I18N[settings.lang].themes[id] }; }
+function activeThemeInfo(){ return themeInfo(settings.theme); }
+
+let destLat, destLng, destName;
+let startMode = 'gps'; // 'gps' | 'custom'
+let startCustomLat, startCustomLng, startCustomName;
+let startLat, startLng, totalDistance;
+let routePoints = null;
+let routeCumDist = null;
+let usingRoute = false;
+let progressBase = 0; // % locked in at the last route recalculation — never goes down
+let arrivalCelebrated = false; // guards the one-shot confetti/spin so it doesn't replay on every GPS tick
+let maxProgress = 0;
+let boardTileCount = 100; // real number of route tiles on screen, incl. turn tiles
+let watchId = null;
+let resizeTimer = null;
+let wakeLock = null;
+
+const $ = id => document.getElementById(id);
+const STORAGE_KEY = 'dalekoJeszcze_trip_v1';
+const HISTORY_KEY = 'dalekoJeszcze_destHistory_v1';
+
+function loadDestHistory(){
+  try{
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e){ return []; }
+}
+function addToDestHistory(r){
+  try{
+    let list = loadDestHistory().filter(h => h.fullName !== r.fullName);
+    list.unshift({ shortName: r.shortName, fullName: r.fullName, lat: r.lat, lon: r.lon });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 6)));
+  } catch(e){}
+}
+function normalizeForMatch(s){
+  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function showDestSuggestions(query){
+  const q = normalizeForMatch(query || '');
+  const all = loadDestHistory();
+  const list = q ? all.filter(r => normalizeForMatch(r.fullName).includes(q) || normalizeForMatch(r.shortName).includes(q)) : all;
+  const listEl = $('resultsList');
+  if(list.length === 0){ listEl.classList.add('hidden'); listEl.innerHTML = ''; return; }
+  listEl.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'result-history-label';
+  label.textContent = t('recentLabel');
+  listEl.appendChild(label);
+  list.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'result-item';
+    btn.innerHTML = '<b>🕘 ' + r.shortName + '</b>' + r.fullName;
+    btn.addEventListener('click', () => selectDestination(r));
+    listEl.appendChild(btn);
+  });
+  listEl.classList.remove('hidden');
+  $('setupStatus').textContent = '';
+  $('setupStatus').classList.remove('error');
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* ---------- API LAYER ----------
+   Geocoding (address search) and routing (road distance) use Mapbox —
+   stable, real-usage-limits service, restricted to this GitHub Pages
+   domain via the token's URL restriction in the Mapbox dashboard.
+   The free "pick a point on a map" picker still uses OpenStreetMap tiles
+   directly (no key, no per-request limit, fine for many simultaneous users).
+*/
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJ0dXJkYWN5ayIsImEiOiJjbXNvcTB4bGgwNmRzMnlzYmthdXM4aXltIn0.Y_bzVAIuW73jNvP_PN3c2A';
+const API_BASE_URL = '';
+async function apiFetch(path, options = {}){
+  if(!API_BASE_URL) throw new Error('BACKEND_NOT_CONFIGURED');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeout || 15000);
+  try{
+    const res = await fetch(API_BASE_URL.replace(/\/$/, '') + path, {
+      ...options, signal: controller.signal,
+      headers: {'Accept':'application/json', ...(options.headers || {})}
+    });
+    if(!res.ok) throw new Error('API HTTP ' + res.status);
+    return await res.json();
+  } finally { clearTimeout(timer); }
+}
+
+/* ---------- WAKE LOCK (keep screen on during the trip) ---------- */
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch(e){ /* unsupported or refused — ignore, not critical */ }
+}
+function releaseWakeLock(){
+  try{ wakeLock?.release(); } catch(e){}
+  wakeLock = null;
+}
+document.addEventListener('visibilitychange', async () => {
+  if(document.visibilityState === 'visible' && !$('boardScreen').classList.contains('hidden')){
+    await requestWakeLock();
+  }
+});
+
+/* ---------- TRIP PERSISTENCE (survive refresh / closed tab) ---------- */
+function saveTripState(){
+  try{
+    const data = {
+      destLat, destLng, destName,
+      totalDistance, usingRoute, routePoints, routeCumDist,
+      maxProgress, progressBase,
+      theme:settings.theme, tileCount:settings.tileCount,
+      forceStraightLine:settings.forceStraightLine, lang:settings.lang,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e){ /* storage unavailable (e.g. private mode, in-chat preview) — ignore */ }
+}
+function loadTripState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(data && typeof data.destLat === 'number') return data;
+  } catch(e){}
+  return null;
+}
+function clearTripState(){
+  try{ localStorage.removeItem(STORAGE_KEY); } catch(e){}
+}
+
+function checkForSavedTrip(){
+  const saved = loadTripState();
+  if(!saved) return;
+  const lang = saved.lang === 'en' ? 'en' : 'pl';
+  const pct = Math.round((saved.maxProgress || 0) * 100);
+  $('resumeTitle').textContent = I18N[lang].resumeTitle;
+  $('resumeText').textContent = (saved.destName || '') + ' — ' + I18N[lang].resumeDonePct + ' ' + pct + '%';
+  $('resumeContinueBtn').textContent = I18N[lang].resumeContinue;
+  $('resumeDismissBtn').textContent = I18N[lang].resumeNew;
+  $('resumeBanner').classList.remove('hidden');
+  $('setupFormArea').classList.add('hidden');
+
+  $('resumeContinueBtn').onclick = () => {
+    settings.theme = saved.theme || 'road';
+    settings.tileCount = saved.tileCount || 100;
+    settings.forceStraightLine = !!saved.forceStraightLine;
+    setLang(lang);
+
+    destLat = saved.destLat; destLng = saved.destLng; destName = saved.destName;
+    totalDistance = saved.totalDistance;
+    usingRoute = !!saved.usingRoute;
+    routePoints = saved.routePoints || null;
+    routeCumDist = saved.routeCumDist || null;
+    maxProgress = saved.maxProgress || 0;
+    progressBase = saved.progressBase || 0;
+
+    routeMeta.segments = null;
+    if(usingRoute && routePoints) buildSegmentMeta();
+    gpsState = {
+      lastAcceptedIndex: indexForProgress(maxProgress),
+      lastAcceptedProgress: maxProgress,
+      lastPosition: null, lastTimestamp: 0, pendingJump: null,
+      lastRawPosition: null, lastRawTimestamp: 0
+    };
+    routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+    logTripEvent('trip_resumed', {});
+
+    $('resumeBanner').classList.add('hidden');
+    $('setupScreen').classList.add('hidden');
+    $('boardScreen').classList.remove('hidden');
+    resetRouteMapView();
+    buildBoard();
+    renderProgress(maxProgress);
+
+    updateRouteModeIcon();
+    requestWakeLock();
+    startTracking();
+  };
+  $('resumeDismissBtn').onclick = () => {
+    clearTripState();
+    $('resumeBanner').classList.add('hidden');
+    $('setupFormArea').classList.remove('hidden');
+  };
+}
+
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2-lat1);
+  const dLon = toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function buildCumulativeDistances(points){
+  const cum = [0];
+  for(let i = 1; i < points.length; i++){
+    cum.push(cum[i-1] + haversine(points[i-1][0], points[i-1][1], points[i][0], points[i][1]));
+  }
+  return cum;
+}
+
+async function fetchRouteFromMapbox(sLat, sLng, dLat, dLng){
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson&access_token=${MAPBOX_TOKEN}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Mapbox Directions HTTP ' + res.status);
+  const data = await res.json();
+  if(!data.routes || data.routes.length === 0) throw new Error('no road route');
+  const route = data.routes[0];
+  const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  const cum = buildCumulativeDistances(points);
+  return {points, cum, totalKm: route.distance / 1000};
+}
+async function fetchRouteFromOsrm(sLat, sLng, dLat, dLng){
+  const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('OSRM HTTP ' + res.status);
+  const data = await res.json();
+  if(!data.routes || data.routes.length === 0) throw new Error('no road route');
+  const route = data.routes[0];
+  const points = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  const cum = buildCumulativeDistances(points);
+  return {points, cum, totalKm: route.distance / 1000};
+}
+async function fetchRoute(sLat, sLng, dLat, dLng){
+  if(API_BASE_URL){
+    const data = await apiFetch('/route', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({start:{lat:sLat,lng:sLng}, destination:{lat:dLat,lng:dLng}}),
+      timeout: 20000
+    });
+    const points = (data.points || data.route || []).map(p => Array.isArray(p) ? [Number(p[0]), Number(p[1])] : [Number(p.lat), Number(p.lng)]);
+    if(points.length < 2) throw new Error('invalid backend route');
+    const cum = buildCumulativeDistances(points);
+    return {points, cum, totalKm: Number(data.totalKm || data.distanceKm || cum[cum.length-1])};
+  }
+  // real runtime fallback: if Mapbox fails for any reason (spotty signal
+  // mid-drive, rate limit, timeout...) try OSRM before giving up on a road
+  // route entirely — previously OSRM only ran when no Mapbox token was
+  // configured at all, so a single failed Mapbox call during a mid-trip
+  // recalculation silently dropped straight to straight-line mode for good
+  let mapboxError = null;
+  if(MAPBOX_TOKEN){
+    try{
+      return await fetchRouteFromMapbox(sLat, sLng, dLat, dLng);
+    } catch(e){
+      mapboxError = e && e.message ? e.message : String(e);
+      console.warn('Mapbox routing failed, falling back to OSRM:', e);
+    }
+  }
+  try{
+    return await fetchRouteFromOsrm(sLat, sLng, dLat, dLng);
+  } catch(e){
+    const osrmError = e && e.message ? e.message : String(e);
+    // surface both real failure reasons together — this is what actually
+    // gets shown/logged when a mid-trip recalculation drops to straight
+    // line, instead of a generic "no route" that hides which provider(s)
+    // failed and why
+    const combined = new Error('Mapbox: ' + (mapboxError || 'n/a') + ' | OSRM: ' + osrmError);
+    combined.mapboxError = mapboxError;
+    combined.osrmError = osrmError;
+    throw combined;
+  }
+}
+
+/* ---------- BOARD BUILDING (always fits the container, no scrolling) ---------- */
+function applyThemeVars(theme){
+  const root = document.documentElement.style;
+  root.setProperty('--sky-top', theme.bgTop);
+  root.setProperty('--sky-bottom', theme.bgBottom);
+  root.setProperty('--asphalt', theme.trackBg);
+  root.setProperty('--asphalt-light', theme.trackBgLight);
+  root.setProperty('--grass', theme.tileDone);
+  root.setProperty('--sun', theme.startColor);
+  root.setProperty('--finish', theme.finishColor);
+}
+
+function buildGridTiles(wrap, theme, count){
+  wrap.className = 'road-wrap layout-grid' + (boardViewMode === 'map' ? ' hidden' : '');
+  wrap.style.display = 'grid';
+  // square-ish arrangement (cols ≈ rows) reads much better than one driven
+  // by the container's own aspect ratio; theme bias still gives forest its
+  // narrower switchback character
+  let cols = Math.max(3, Math.round(Math.sqrt(count * (theme.gridAspectBias || 1))));
+  cols = Math.min(cols, count);
+
+  // the grid interleaves a "turn" tile between every pair of rows, and those
+  // turn tiles are real counted route tiles too (see below) — so to make
+  // the tile-count slider mean the same total across every theme, we solve
+  // for how many rows fit `count` tiles TOTAL (regular + turns combined),
+  // not just `count` regular tiles with turns added on top
+  let rows = Math.max(1, Math.ceil(count / cols));
+  for(let i = 0; i < 6; i++){
+    const turns = Math.max(0, rows - 1);
+    const regularBudget = Math.max(rows, count - turns);
+    const newRows = Math.max(1, Math.ceil(regularBudget / cols));
+    if(newRows === rows) break;
+    rows = newRows;
+  }
+  const turnsTotal = Math.max(0, rows - 1);
+  const regularCount = Math.max(rows, count - turnsTotal);
+
+  const colGap = count > 200 ? 1 : count > 80 ? 2 : 4;
+  wrap.style.rowGap = '0px';
+  wrap.style.columnGap = colGap + 'px';
+  wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  // interleave a full-size "turn" row between every pair of tile rows —
+  // this is where the road visually bends, instead of a flat table grid.
+  // the turn cell is its own separate route tile (counted, lights up,
+  // hosts the car) — not part of the row's regular tiles.
+  const rowTemplate = [];
+  for(let r = 0; r < rows; r++){
+    rowTemplate.push('1fr');
+    if(r < rows - 1) rowTemplate.push('1fr');
+  }
+  wrap.style.gridTemplateRows = rowTemplate.join(' ');
+
+  const decoSize = Math.max(9, Math.min(18, Math.floor(140 / Math.sqrt(count))));
+  let seq = 0;
+  for(let row = 0; row < rows; row++){
+    const isLastRow = (row === rows - 1);
+    const tilesInRow = isLastRow ? (regularCount - row*cols) : cols;
+    for(let c = 0; c < tilesInRow; c++){
+      seq++;
+      const col = (row % 2 === 1) ? (cols - 1 - c) : c;
+      const tl = document.createElement('div');
+      tl.className = 'tile';
+      tl.id = 'tile-' + seq;
+      tl.style.gridColumn = (col+1);
+      tl.style.gridRow = (row*2 + 1);
+      if(seq === 1) tl.classList.add('start');
+      if(row === rows-1 && c === tilesInRow-1) tl.classList.add('finish');
+      wrap.appendChild(tl);
+    }
+
+    if(!isLastRow){
+      const turnCol = (row % 2 === 0) ? cols : 1;
+      seq++;
+      const turn = document.createElement('div');
+      turn.className = 'tile turn';
+      turn.id = 'tile-' + seq;
+      turn.style.gridColumn = turnCol;
+      turn.style.gridRow = (row*2 + 2);
+      wrap.appendChild(turn);
+
+      if(theme.decor && theme.decor.length && cols > 2){
+        const decorCol = clamp(1 + ((row*3 + 2) % (cols - 1)), 1, cols);
+        if(decorCol !== turnCol){
+          const deco = document.createElement('span');
+          deco.className = 'row-deco';
+          deco.textContent = theme.decor[row % theme.decor.length].e;
+          deco.style.fontSize = decoSize + 'px';
+          deco.style.gridColumn = decorCol;
+          deco.style.gridRow = (row*2 + 2);
+          deco.style.animationDelay = (row * 0.3) + 's';
+          wrap.appendChild(deco);
+        }
+      }
+    }
+  }
+  boardTileCount = seq;
+}
+
+function buildPathTiles(wrap, theme, count){
+  wrap.className = 'road-wrap layout-path' + (boardViewMode === 'map' ? ' hidden' : '');
+  wrap.style.display = 'block';
+  boardTileCount = count;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  // absolute-positioned children ignore the parent's own padding (unlike
+  // the CSS-grid themes, which respect it automatically) — inset the whole
+  // placement area manually so dots never sit flush against the frame
+  const pad = 10;
+  const usableW = Math.max(1, W - pad*2);
+  const usableH = Math.max(1, H - pad*2);
+
+  // use the same row/column density as the grid themes (cols ≈ sqrt(count))
+  // so tiles end up the same visual size as road/forest at the same count —
+  // then wobble each tile within its row band for the meandering look
+  let cols = Math.max(3, Math.round(Math.sqrt(count)));
+  cols = Math.min(cols, count);
+  const rows = Math.ceil(count / cols);
+  const cellW = usableW / cols;
+  const cellH = usableH / rows;
+
+  const waveFreq = (2 * Math.PI * 1.4) / cols;
+  const waveAmp = cellH * 0.30;
+  const footstepAmp = (theme.layout === 'zigzag') ? cellH * 0.055 : 0; // small alternating footprint offset (dino only)
+
+  // worst case is the row-boundary pair (last tile of a row / first of the
+  // next): their vertical gap can shrink by the wobble plus up to two
+  // footstep offsets (consecutive tiles always alternate footstep sign) —
+  // keep the tile diameter safely below that so dots never touch, with
+  // extra breathing room right at that boundary
+  const worstGap = cellH - waveAmp - 2*footstepAmp;
+  const size = Math.max(6, Math.min(34, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.7))));
+
+  const centers = [];
+  for(let i = 0; i < count; i++){
+    const row = Math.floor(i / cols);
+    const colInRow = i % cols;
+    const col = (row % 2 === 1) ? (cols - 1 - colInRow) : colInRow;
+    let y = pad + (row + 0.5) * cellH + Math.sin(colInRow * waveFreq) * waveAmp;
+    if(theme.layout === 'zigzag'){
+      y += (i % 2 === 0 ? -1 : 1) * footstepAmp;
+    }
+    const x = pad + (col + 0.5) * cellW;
+    centers.push([x, clamp(y, pad + size/2, H - pad - size/2)]);
+  }
+
+  // a visible connecting line under the tiles, so gaps between them still
+  // read as part of one continuous path
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.position = 'absolute';
+  svg.style.inset = '0';
+  svg.style.pointerEvents = 'none';
+  const poly = document.createElementNS(svgNS, 'polyline');
+  poly.setAttribute('points', centers.map(c => c[0] + ',' + c[1]).join(' '));
+  poly.setAttribute('fill', 'none');
+  poly.setAttribute('stroke', theme.trackBgLight);
+  poly.setAttribute('stroke-width', Math.max(2, size * 0.55));
+  poly.setAttribute('stroke-linecap', 'round');
+  poly.setAttribute('stroke-linejoin', 'round');
+  poly.setAttribute('opacity', '0.9');
+  svg.appendChild(poly);
+  wrap.appendChild(svg);
+
+  centers.forEach((c, i) => {
+    const tl = document.createElement('div');
+    tl.className = 'tile-path';
+    tl.id = 'tile-' + (i+1);
+    tl.style.width = size + 'px';
+    tl.style.height = size + 'px';
+    tl.style.left = (c[0] - size/2) + 'px';
+    tl.style.top = (c[1] - size/2) + 'px';
+    if(i === 0) tl.classList.add('start');
+    if(i === count-1) tl.classList.add('finish');
+    wrap.appendChild(tl);
+  });
+
+  // themed decorations spread along the path, offset to the side so they
+  // don't collide with the tiles or the connecting line
+  if(theme.decor && theme.decor.length){
+    const decorCount = clamp(Math.round(count / 25) * 3, 9, 30);
+    const decorSize = Math.max(10, Math.min(20, Math.floor(size * 1.1)));
+    const offset = size * 1.6 + 6;
+    for(let k = 0; k < decorCount; k++){
+      const idx = Math.min(count - 1, Math.floor((k + 0.5) * (count - 1) / decorCount));
+      const c = centers[idx];
+      const side = k % 2 === 0 ? 1 : -1;
+      const deco = document.createElement('span');
+      deco.className = 'row-deco';
+      deco.style.position = 'absolute';
+      deco.style.left = clamp(c[0] + side * offset, pad + decorSize * 0.6, W - pad - decorSize * 0.6) + 'px';
+      deco.style.top = (c[1] - decorSize/2) + 'px';
+      deco.style.fontSize = decorSize + 'px';
+      deco.style.animationDelay = (k * 0.35) + 's';
+      deco.textContent = theme.decor[k % theme.decor.length].e;
+      wrap.appendChild(deco);
+    }
+  }
+}
+
+function buildDecor(theme){
+  const layer = $('boardDecor');
+  layer.innerHTML = '';
+  const positions = [
+    {top:'6%', left:'6%'}, {top:'10%', right:'8%'},
+    {bottom:'14%', left:'10%'}, {bottom:'8%', right:'6%'}
+  ];
+  theme.decor.forEach((d, idx) => {
+    const el = document.createElement('span');
+    el.className = 'd ' + d.a;
+    el.textContent = d.e;
+    el.style.fontSize = (22 + (idx % 2) * 6) + 'px';
+    el.style.opacity = '.5';
+    const pos = positions[idx % positions.length];
+    Object.entries(pos).forEach(([k,v]) => el.style[k] = v);
+    el.style.animationDuration = (3 + idx * 0.8) + 's';
+    el.style.animationDelay = (idx * 0.4) + 's';
+    layer.appendChild(el);
+  });
+}
+
+function buildBoard(){
+  const theme = activeThemeInfo();
+  applyThemeVars(theme);
+  buildDecor(theme);
+  const wrap = $('roadWrap');
+  wrap.innerHTML = '';
+  if(theme.layout === 'grid'){
+    buildGridTiles(wrap, theme, settings.tileCount);
+  } else {
+    buildPathTiles(wrap, theme, settings.tileCount);
+  }
+}
+
+window.addEventListener('resize', () => {
+  if($('boardScreen').classList.contains('hidden')) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { buildBoard(); renderProgress(maxProgress); }, 200);
+});
+
+function renderProgress(fraction){
+  fraction = Math.max(0, Math.min(1, fraction));
+  const theme = activeThemeInfo();
+  const count = settings.tileCount;
+  // use the same rounded number the person actually sees on screen to decide
+  // "arrived" — comparing an unrounded fraction to a strict 1.0 could show
+  // 100% on screen while still saying "almost there"
+  const displayPercent = Math.round(fraction * 100);
+  const justArrived = displayPercent >= 100 && !arrivalCelebrated;
+  if(displayPercent >= 100) arrivalCelebrated = true;
+
+  // show/hide the arrival banner FIRST — it changes how much vertical space
+  // the board itself has (flex layout), so if it's about to appear we need
+  // to rebuild the board against the new, smaller size before placing any
+  // tiles, or the bottom rows end up positioned below the visible area
+  const arrivalEl = $('arrivalBanner');
+  const bannerWasShown = arrivalEl.classList.contains('show');
+  if(displayPercent >= 100){
+    $('arrivalBannerText').textContent = t('msgDone') + (destName ? ' ' + t('msgDoneTo') + ' ' + destName : '') + '!';
+    arrivalEl.classList.add('show');
+  } else {
+    arrivalEl.classList.remove('show');
+  }
+  if(arrivalEl.classList.contains('show') !== bannerWasShown){
+    buildBoard();
+  }
+
+  const totalTiles = boardTileCount || count;
+  const filledTiles = Math.floor(fraction * totalTiles);
+  const currentTile = Math.min(totalTiles, filledTiles + 1);
+  const carMinSize = Math.floor(160 / Math.sqrt(100)); // reference: size at 100 tiles
+  const carSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
+
+  for(let i = 1; i <= totalTiles; i++){
+    const el = $('tile-' + i);
+    if(!el) continue;
+    el.classList.remove('current');
+    el.querySelector('.car')?.remove();
+    if(i <= filledTiles) el.classList.add('done');
+    else el.classList.remove('done');
+  }
+  const cur = $('tile-' + currentTile);
+  if(cur){
+    cur.classList.add('current');
+    const car = document.createElement('span');
+    car.className = 'car';
+    if(justArrived) car.classList.add('car-arrived-spin');
+    car.style.fontSize = carSize + 'px';
+    car.textContent = theme.vehicle;
+    cur.appendChild(car);
+  }
+
+  $('progressFill').style.width = (fraction*100) + '%';
+  $('statPercent').textContent = displayPercent + '%';
+
+  // totalDistance reflects only the current (possibly recalculated) route
+  // segment, so km-remaining must use the sub-fraction within that segment,
+  // not the overall blended fraction
+  const subFraction = clamp((fraction - progressBase) / Math.max(1e-6, 1 - progressBase), 0, 1);
+  const remainingKm = totalDistance * (1 - subFraction);
+  $('statKm').textContent = remainingKm < 10 ? remainingKm.toFixed(1) : Math.round(remainingKm);
+
+  const msgEl = $('progressMsg');
+  if(displayPercent >= 100){
+    msgEl.textContent = t('msgDone') + (destName ? ' ' + t('msgDoneTo') + ' ' + destName : '') + '!';
+    if(justArrived) triggerArrivalCelebration();
+  } else if(fraction >= 0.9){
+    msgEl.textContent = t('msgAlmost') + ' ' + theme.finishIcon;
+  } else if(fraction >= 0.5){
+    msgEl.textContent = t('msgHalf');
+  } else if(fraction >= 0.1){
+    msgEl.textContent = t('msgGo') + ' ' + theme.vehicle;
+  } else {
+    msgEl.textContent = t('msgStart') + ' ' + theme.startIcon;
+  }
+  updateRouteMapCarPosition();
+}
+
+/* ---- arrival celebration: confetti (tap anywhere to dismiss early) plus
+   a one-shot spin/hop on the vehicle icon as it lands on the finish tile ---- */
+function spawnConfetti(){
+  const overlay = $('confettiOverlay');
+  overlay.innerHTML = '';
+  const colors = ['#FF6B5B','#FFC93C','#6FCF97','#39B6E0','#9B59B6','#FF9F1C'];
+  const n = 60;
+  for(let i = 0; i < n; i++){
+    const p = document.createElement('span');
+    p.className = 'confetti-piece';
+    p.style.left = (Math.random()*100) + 'vw';
+    p.style.background = colors[i % colors.length];
+    p.style.animationDuration = (2 + Math.random()*1.5) + 's';
+    p.style.animationDelay = (Math.random()*0.6) + 's';
+    overlay.appendChild(p);
+  }
+  overlay.classList.remove('hidden');
+}
+function dismissConfetti(){
+  const overlay = $('confettiOverlay');
+  overlay.classList.add('hidden');
+  overlay.innerHTML = '';
+}
+function triggerArrivalCelebration(){
+  spawnConfetti();
+  clearTimeout(window._confettiAutoTimer);
+  window._confettiAutoTimer = setTimeout(dismissConfetti, 6000);
+}
+$('confettiOverlay').addEventListener('click', dismissConfetti);
+
+
+/* ---------- ROBUST GPS ↔ ROUTE MATCHING ----------
+   Zamiast szukać najbliższego POJEDYNCZEGO punktu trasy (co na długich
+   prostych odcinkach OSRM z rzadko rozstawionymi punktami dawało niedokładne
+   "przyklejenie"), rzutujemy pozycję GPS na najbliższy ODCINEK trasy —
+   dokładniejsze. Dodatkowo porównujemy kierunek jazdy z kierunkiem odcinka,
+   żeby nie pomylić np. mostu z równoległą drogą serwisową pod spodem.
+*/
+let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+let routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+let routeMeta = {segments:null};
+
+/* ---- lightweight diagnostic log, kept for the current trip only ----
+   Records off-route detections and route-recalculation attempts/results
+   (including the real HTTP status / error message, not just "failed"),
+   so a problem seen while driving can be copied out afterwards instead
+   of only living in the browser console nobody can see on a phone. */
+const TRIP_LOG_KEY = 'dalekoJeszcze_lastTripLog_v1';
+const TRIP_LOG_MAX_ENTRIES = 300;
+let tripLog = [];
+try{
+  const savedLog = localStorage.getItem(TRIP_LOG_KEY);
+  if(savedLog) tripLog = JSON.parse(savedLog);
+} catch(e){ tripLog = []; }
+
+function logTripEvent(type, data){
+  const entry = Object.assign({type, t: new Date().toISOString()}, data || {});
+  tripLog.push(entry);
+  if(tripLog.length > TRIP_LOG_MAX_ENTRIES) tripLog.splice(0, tripLog.length - TRIP_LOG_MAX_ENTRIES);
+  try{ localStorage.setItem(TRIP_LOG_KEY, JSON.stringify(tripLog)); } catch(e){}
+}
+
+function resetTripLog(){
+  tripLog = [];
+  try{ localStorage.removeItem(TRIP_LOG_KEY); } catch(e){}
+}
+
+function tripLogAsText(){
+  if(!tripLog.length) return '(brak zapisanych zdarzeń z ostatniej podróży)';
+  return tripLog.map(e => JSON.stringify(e)).join('\n');
+}
+
+function projectPointToSegment(lat, lng, a, b){
+  const lat0 = (lat + a[0] + b[0]) / 3 * Math.PI / 180;
+  const kLat = 111.32;
+  const kLng = 111.32 * Math.cos(lat0);
+  const px = (lng - a[1]) * kLng, py = (lat - a[0]) * kLat;
+  const bx = (b[1] - a[1]) * kLng, by = (b[0] - a[0]) * kLat;
+  const len2 = bx*bx + by*by;
+  let tt = 0; if(len2 > 1e-12) tt = clamp((px*bx + py*by) / len2, 0, 1);
+  const qx = bx*tt, qy = by*tt;
+  const dx = px - qx, dy = py - qy;
+  // dx/dy come from px/py/qx/qy, which are already in kilometers (lat/lng
+  // degree differences multiplied by km-per-degree factors above) — no
+  // further division needed. This used to divide by 1000 on top of that,
+  // silently reporting every off-route distance about 1000x smaller than
+  // reality (e.g. an actual 1.4km deviation came out as 0.0014km), which
+  // meant the off-route threshold (0.12km) was practically unreachable in
+  // normal driving and a route recalculation would never fire from this.
+  return {t:tt, distanceKm: Math.sqrt(dx*dx + dy*dy), alongKm: haversine(a[0],a[1],b[0],b[1]) * tt};
+}
+function buildSegmentMeta(){
+  routeMeta.segments = [];
+  if(!routePoints || routePoints.length < 2) return;
+  for(let i = 0; i < routePoints.length - 1; i++){
+    const a = routePoints[i], b = routePoints[i+1];
+    const dx = b[1]-a[1], dy = b[0]-a[0];
+    routeMeta.segments.push({i, a, b, lengthKm: haversine(a[0],a[1],b[0],b[1]), heading: Math.atan2(dx,dy) * 180 / Math.PI});
+  }
+}
+function bearing(lat1, lng1, lat2, lng2){
+  const p1 = lat1*Math.PI/180, p2 = lat2*Math.PI/180, dl = (lng2-lng1)*Math.PI/180;
+  return (Math.atan2(Math.sin(dl)*Math.cos(p2), Math.cos(p1)*Math.sin(p2) - Math.sin(p1)*Math.cos(p2)*Math.cos(dl)) * 180/Math.PI + 360) % 360;
+}
+function angleDiff(a, b){ return Math.abs((a - b + 540) % 360 - 180); }
+
+function projectGpsToRoute(lat, lng, accuracy){
+  if(!routePoints || routePoints.length < 2 || !routeMeta.segments) return null;
+  const start = Math.max(0, gpsState.lastAcceptedIndex - 20);
+  const end = Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
+  let best = null;
+  let move = 0, gpsBearing = null;
+  // heading is computed from the raw, always-updated previous GPS fix —
+  // NOT gpsState.lastPosition, which only advances when a fix is accepted.
+  // While several fixes in a row are off-route (each returns early without
+  // touching lastPosition), lastPosition would otherwise stay frozen at an
+  // increasingly stale point, producing a bearing that no longer reflects
+  // where you're actually currently heading — that was causing spurious,
+  // repeated headingMismatch flags right after a fresh recalculation.
+  if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
+    move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+    gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+  }
+  const testRange = (from, to) => {
+    for(let i = from; i <= to; i++){
+      const s = routeMeta.segments[i];
+      const p = projectPointToSegment(lat, lng, s.a, s.b);
+      const along = routeCumDist[i] + p.alongKm;
+      let score = p.distanceKm;
+      let hd = null;
+      if(gpsBearing !== null){
+        hd = angleDiff(gpsBearing, s.heading);
+        if(move > 0.02 && hd > 100) score += Math.min(0.15, p.distanceKm + 0.05);
+      }
+      if(!best || score < best.score) best = {index:i, alongKm:along, distanceKm:p.distanceKm, t:p.t, score, headingDiff:hd};
+    }
+  };
+  testRange(start, end);
+  // The window above only looks a little behind and a lot ahead of the
+  // last matched point, so a wrong-way move — missed a junction, doubled
+  // back on a motorway — can still land on a nearby segment with a small
+  // on-road distance, hiding the fact that we're really off-route. Flag
+  // that case explicitly using GPS heading vs. the matched segment's
+  // heading, so acceptProgressFromGps can treat it as off-route too, not
+  // just a plain distance check.
+  if(best && move > 0.02 && best.headingDiff !== null && best.headingDiff > 100){
+    best.headingMismatch = true;
+  }
+  // NOTE: this used to fall back to searching the *entire* route whenever
+  // the local match was weak. That could snap the match to a point that's
+  // spatially close but far along the route (e.g. a road passing near the
+  // destination while you're still mid-trip), causing a sudden false jump
+  // in progress. Now we only ever look near where we last knew we were —
+  // a genuinely poor match here correctly falls through to the off-route /
+  // weak-GPS handling below instead of guessing a distant index.
+  return best;
+}
+
+// finds the route-point index closest to a given progress fraction —
+// used to seed gpsState when resuming a saved trip or starting fresh
+function indexForProgress(fraction){
+  if(!usingRoute || !routeCumDist) return 0;
+  // totalDistance covers only the current route segment (see progressBase),
+  // so convert the overall fraction into a sub-fraction within it first
+  const subFraction = clamp((fraction - progressBase) / Math.max(1e-6, 1 - progressBase), 0, 1);
+  const targetKm = subFraction * totalDistance;
+  let idx = 0;
+  for(let i = 0; i < routeCumDist.length; i++){
+    if(routeCumDist[i] >= targetKm) { idx = i; break; }
+    idx = i;
+  }
+  return idx;
+}
+
+// centralizes writes to the status line so a message meant to stay
+// visible for a while (e.g. "route recalculation failed") can't get wiped
+// out a second later by the very next routine GPS status update — that
+// was happening before, which is why a real failure could flash by
+// unnoticed while driving
+let boardStatusStickyUntil = 0;
+function setBoardStatus(text, isError, stickyMs){
+  const now = performance.now();
+  if(now < boardStatusStickyUntil) return;
+  $('boardStatus').textContent = text;
+  $('boardStatus').classList.toggle('error', !!isError);
+  boardStatusStickyUntil = stickyMs ? now + stickyMs : 0;
+}
+
+function acceptProgressFromGps(pos){
+  const {latitude:lat, longitude:lng, accuracy = 30} = pos.coords;
+  if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const now = performance.now();
+
+  // projectGpsToRoute needs the PREVIOUS raw fix (to compute heading), so
+  // read the match first — then advance lastRawPosition/lastRawTimestamp
+  // to this fix. This must happen unconditionally, before any early
+  // return below, or lastRawPosition freezes while off-route and heading
+  // ends up computed against an increasingly stale point (see
+  // projectGpsToRoute for the full explanation).
+  const match = usingRoute ? projectGpsToRoute(lat, lng, accuracy) : null;
+  gpsState.lastRawPosition = {lat, lng};
+  gpsState.lastRawTimestamp = now;
+  let fraction, matchedIndex = 0;
+
+  if(usingRoute && match){
+    // blend: progressBase is locked in from any earlier recalculation and
+    // never goes down; the remaining (1-progressBase) share fills in from
+    // progress along the current (possibly recalculated) route segment
+    fraction = progressBase + (1 - progressBase) * (match.alongKm / totalDistance);
+    matchedIndex = match.index;
+    const offRouteThreshold = Math.max(0.12, accuracy/1000*4);
+    if(match.distanceKm > offRouteThreshold || match.headingMismatch){
+      // genuinely off the route right now — either physically far from any
+      // known segment, or heading the wrong way relative to the matched
+      // segment (e.g. missed a junction and carried on past it). Worth a
+      // fresh route from here, not just a timer tick. maybeRefreshRoute's
+      // own cooldown stops this from spamming the API if we stay off-route
+      // for a while.
+      logTripEvent('off_route_detected', {lat, lng, distanceKm: +match.distanceKm.toFixed(3), headingMismatch: !!match.headingMismatch});
+      maybeRefreshRoute(lat, lng, now);
+      setBoardStatus(t('gpsWeak'), false);
+      return; // too far from any known segment — likely noisy fix, skip it
+    }
+  } else {
+    // no usable match at all — either already in straight-line fallback, or
+    // GPS doesn't land anywhere near the route. Try periodically to (re)get
+    // a real route from here (e.g. connectivity came back).
+    maybeRefreshRoute(lat, lng, now);
+    // straight-line mode: totalDistance is the distance from wherever this
+    // mode started (trip start, or a mid-trip fallback) to the destination;
+    // progressBase (usually 0 here, but not always — see the mid-trip
+    // recalculation fallback) blends it in the same way as route mode
+    const remaining = haversine(lat, lng, destLat, destLng);
+    fraction = progressBase + (1 - progressBase) * ((totalDistance - remaining) / totalDistance);
+  }
+  fraction = clamp(fraction, 0, 1);
+
+  // don't let a single noisy fix near the end declare arrival — only accept
+  // fraction===1 once we're also physically close to the destination point
+  if(fraction >= 0.98){
+    const directDist = haversine(lat, lng, destLat, destLng);
+    const arrivalThreshold = Math.max(0.05, (accuracy || 30) / 1000 * 2);
+    if(directDist > arrivalThreshold){
+      fraction = Math.min(fraction, 0.98);
+    }
+  }
+
+  // reject GPS jumps that are physically implausible in the elapsed time,
+  // unless the same jump repeats (then it's probably real, e.g. a tunnel exit)
+  const jump = fraction - gpsState.lastAcceptedProgress;
+  const previous = gpsState.lastPosition;
+  const elapsed = Math.max(0.5, (now - gpsState.lastTimestamp) / 1000);
+  const physicalMove = previous ? haversine(previous.lat, previous.lng, lat, lng) : 0;
+  const maxReasonableJump = Math.max(0.025, Math.min(0.12, (physicalMove + Math.max(accuracy,30)/1000*2) / Math.max(1, elapsed*2)));
+
+  if(jump > maxReasonableJump && gpsState.lastAcceptedProgress < 0.95){
+    if(gpsState.pendingJump && Math.abs(gpsState.pendingJump.fraction - fraction) < 0.04){
+      gpsState.pendingJump = null; // confirmed by a second, similar reading — accept below
+    } else {
+      gpsState.pendingJump = {fraction, index:matchedIndex, at:now};
+      setBoardStatus(t('gpsWeak'), false);
+      return;
+    }
+  }
+
+  if(fraction >= gpsState.lastAcceptedProgress){
+    maxProgress = Math.max(maxProgress, fraction);
+    gpsState.lastAcceptedProgress = maxProgress;
+    gpsState.lastAcceptedIndex = Math.max(gpsState.lastAcceptedIndex, matchedIndex);
+    gpsState.lastPosition = {lat, lng};
+    gpsState.lastTimestamp = now;
+    renderProgress(maxProgress);
+    saveTripState();
+    setBoardStatus('', false);
+    if(Math.round(maxProgress*100) >= 100){
+      stopTracking();
+      releaseWakeLock();
+      clearTripState();
+    }
+  }
+}
+
+// triggered only when we're actually off the route (or have no usable
+// match at all) — not on a blind schedule while happily on-route, since
+// that would just waste routing requests for no benefit.
+//
+// Two thresholds instead of one fixed cooldown:
+// - ROUTE_REFRESH_FLOOR_MS is a hard minimum gap between attempts, always
+//   enforced, so a jittery GPS fix can't fire off a burst of requests.
+// - ROUTE_REFRESH_DISTANCE_KM lets a recalc fire again as soon as we've
+//   moved meaningfully (e.g. reached a motorway exit) even if the floor
+//   hasn't fully elapsed — driving fast off-route used to mean the route
+//   you get back is already stale again by the time the old 20s cooldown
+//   allowed a retry.
+// - ROUTE_REFRESH_STALE_MS is the old 20s value, kept as a safety-net
+//   retry interval for when we're NOT moving (e.g. parked with no
+//   connectivity) — distance alone would never trigger a retry there.
+const ROUTE_REFRESH_FLOOR_MS = 8000;
+const ROUTE_REFRESH_STALE_MS = 20000;
+const ROUTE_REFRESH_DISTANCE_KM = 0.1;
+function maybeRefreshRoute(lat, lng, now){
+  if(routeRecalc.pending) return;
+  const sinceLast = now - routeRecalc.lastFetchAt;
+  if(sinceLast < ROUTE_REFRESH_FLOOR_MS) return;
+  const movedKm = routeRecalc.lastFetchPos ? haversine(routeRecalc.lastFetchPos.lat, routeRecalc.lastFetchPos.lng, lat, lng) : Infinity;
+  const movedEnough = movedKm >= ROUTE_REFRESH_DISTANCE_KM;
+  const staleEnough = sinceLast >= ROUTE_REFRESH_STALE_MS;
+  if(!movedEnough && !staleEnough) return;
+  logTripEvent('recalc_attempt', {lat, lng, sinceLastMs: Math.round(sinceLast), movedKm: +movedKm.toFixed(3), reason: movedEnough ? 'moved' : 'stale'});
+  routeRecalc.pending = true;
+  routeRecalc.lastFetchAt = now;
+  routeRecalc.lastFetchPos = {lat, lng};
+  recalcRouteFromCurrentPosition(lat, lng);
+}
+
+function updateRouteModeIcon(){
+  const routeIcon = $('routeModeIcon');
+  if(!routeIcon) return;
+  if(settings.forceStraightLine || !usingRoute){
+    routeIcon.textContent = '📏';
+    routeIcon.title = t('routeModeStraightTitle');
+  } else {
+    routeIcon.textContent = '〰️';
+    routeIcon.title = t('routeModeRouteTitle');
+  }
+}
+
+async function recalcRouteFromCurrentPosition(lat, lng){
+  try{
+    const newRoute = await fetchRoute(lat, lng, destLat, destLng);
+    progressBase = maxProgress; // lock in what's already been covered — the board never rewinds
+    routePoints = newRoute.points;
+    routeCumDist = newRoute.cum;
+    totalDistance = newRoute.totalKm;
+    usingRoute = true;
+    routeMeta.segments = null;
+    buildSegmentMeta();
+    gpsState.lastAcceptedIndex = 0;
+    gpsState.pendingJump = null;
+    updateRouteModeIcon();
+    saveTripState();
+    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length});
+  } catch(e){
+    // no route (e.g. offline) — don't get stuck waiting forever on a route
+    // that no longer matches; fall back to straight-line distance from here
+    console.warn('Route recalculation failed, switching to straight-line distance:', e);
+    logTripEvent('recalc_failed', {lat, lng, mapboxError: e && e.mapboxError, osrmError: e && e.osrmError, message: e && e.message});
+    progressBase = maxProgress;
+    usingRoute = false;
+    routePoints = null;
+    routeCumDist = null;
+    routeMeta.segments = null;
+    totalDistance = haversine(lat, lng, destLat, destLng);
+    gpsState.lastAcceptedIndex = 0;
+    gpsState.pendingJump = null;
+    updateRouteModeIcon();
+    saveTripState();
+    // sticky for its full 6s so the very next routine GPS status update
+    // can't immediately overwrite/hide it (this used to happen — the
+    // error could fire and vanish within a second, invisible to a driver)
+    setBoardStatus(t('routeRecalcFailed'), true, 6000);
+    setTimeout(() => {
+      if($('boardStatus').textContent === t('routeRecalcFailed')) {
+        setBoardStatus('', false);
+      }
+    }, 6000);
+  } finally {
+    routeRecalc.pending = false;
+    if(boardViewMode !== 'board') renderRouteMap(false);
+  }
+}
+
+function handlePosition(pos){ acceptProgressFromGps(pos); }
+
+function handlePositionError(err){
+  $('boardStatus').textContent = t('errGps') + ' ' + err.message;
+  $('boardStatus').classList.add('error');
+}
+
+function startTracking(){
+  if(!navigator.geolocation){
+    $('boardStatus').textContent = t('errNoGeoSupport');
+    return;
+  }
+  $('boardStatus').classList.remove('error');
+  $('boardStatus').textContent = t('gpsWaiting');
+  watchId = navigator.geolocation.watchPosition(handlePosition, handlePositionError, {
+    enableHighAccuracy: true, maximumAge: 3000, timeout: 15000
+  });
+}
+function stopTracking(){
+  if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+}
+
+async function geocodeMapbox(query){
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?limit=5&language=${settings.lang}&access_token=${MAPBOX_TOKEN}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Mapbox Geocoding HTTP ' + res.status);
+  const data = await res.json();
+  return (data.features || []).map(f => ({
+    lat: f.center[1], lon: f.center[0],
+    shortName: f.text || f.place_name.split(',')[0],
+    fullName: f.place_name
+  }));
+}
+async function geocodeNominatim(query){
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&accept-language=' + settings.lang + '&q=' + encodeURIComponent(query);
+  const res = await fetch(url, {headers: {'Accept': 'application/json'}});
+  if(!res.ok) throw new Error('Nominatim HTTP ' + res.status);
+  const data = await res.json();
+  return data.map(r => ({ lat: r.lat, lon: r.lon, shortName: r.display_name.split(',')[0], fullName: r.display_name }));
+}
+async function geocodePhoton(query){
+  const url = 'https://photon.komoot.io/api/?limit=5&lang=' + settings.lang + '&q=' + encodeURIComponent(query);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Photon HTTP ' + res.status);
+  const data = await res.json();
+  return (data.features || []).map(f => {
+    const p = f.properties;
+    const parts = [p.name, p.street, p.city, p.state, p.country].filter(Boolean);
+    return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], shortName: p.name || p.city || query, fullName: parts.join(', ') };
+  });
+}
+async function geocodeAddress(query){
+  if(API_BASE_URL){
+    const data = await apiFetch('/geocode?q=' + encodeURIComponent(query) + '&lang=' + encodeURIComponent(settings.lang));
+    return Array.isArray(data) ? data : (data.results || []);
+  }
+  // Nominatim (OpenStreetMap) is the primary geocoder — free, no practical
+  // limit for this app's scale, and noticeably better for addresses like
+  // Polish villages with a bare house number and no street name. Mapbox is
+  // merged in as a supplementary source (e.g. for well-known POIs/brands
+  // that OSM may not have tagged by name), never overriding Nominatim.
+  try{
+    const nomRes = await geocodeNominatim(query);
+    if(nomRes.length > 0){
+      if(!MAPBOX_TOKEN) return nomRes;
+      try{
+        const mapRes = await geocodeMapbox(query);
+        const combined = [...nomRes];
+        mapRes.forEach(r => {
+          const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+          const isDup = combined.some(d => Math.abs(parseFloat(d.lat) - lat) < 0.001 && Math.abs(parseFloat(d.lon) - lon) < 0.001);
+          if(!isDup) combined.push(r);
+        });
+        return combined.slice(0, 6);
+      } catch(e){
+        return nomRes; // Mapbox failed — Nominatim's results are still fine on their own
+      }
+    }
+    throw new Error('no Nominatim results');
+  } catch(errA){
+    if(MAPBOX_TOKEN){
+      try{ return await geocodeMapbox(query); }
+      catch(errM){ /* fall through to Photon below */ }
+    }
+    try{ return await geocodePhoton(query); }
+    catch(errB){ throw new Error(errA.message + ' / ' + errB.message); }
+  }
+}
+
+function renderGenericResults(listEl, results, statusEl, onPick){
+  listEl.innerHTML = '';
+  if(results.length === 0){
+    listEl.classList.add('hidden');
+    statusEl.textContent = t('errNoResults');
+    statusEl.classList.add('error');
+    return;
+  }
+  results.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'result-item';
+    btn.innerHTML = '<b>' + r.shortName + '</b>' + r.fullName;
+    btn.addEventListener('click', () => onPick(r));
+    listEl.appendChild(btn);
+  });
+  listEl.classList.remove('hidden');
+}
+
+/* ---- destination search ---- */
+function selectDestination(r){
+  destLat = parseFloat(r.lat);
+  destLng = parseFloat(r.lon);
+  destName = r.shortName;
+  addToDestHistory(r);
+  $('resultsList').classList.add('hidden');
+  $('resultsList').innerHTML = '';
+  $('destAddress').value = '';
+  $('destChipName').textContent = r.shortName;
+  $('destChipAddr').textContent = r.fullName;
+  $('destChip').classList.remove('hidden');
+  $('startBtn').disabled = false;
+  $('setupStatus').textContent = '';
+  $('setupStatus').classList.remove('error');
+}
+$('destClearBtn').addEventListener('click', () => {
+  destLat = destLng = destName = undefined;
+  $('destChip').classList.add('hidden');
+  $('startBtn').disabled = true;
+});
+$('searchBtn').addEventListener('click', async () => {
+  const query = $('destAddress').value.trim();
+  const statusEl = $('setupStatus');
+  statusEl.classList.remove('error');
+  if(!query){ statusEl.textContent = t('errFillDest'); statusEl.classList.add('error'); return; }
+  $('searchBtn').disabled = true;
+  statusEl.textContent = t('searching');
+  try{
+    const results = await geocodeAddress(query);
+    statusEl.textContent = '';
+    renderGenericResults($('resultsList'), results, statusEl, selectDestination);
+  } catch(e){
+    console.warn('Search error:', e);
+    statusEl.textContent = t('errSearchFail') + ' (' + e.message + '). ' + t('errCheckNet');
+    statusEl.classList.add('error');
+  } finally { $('searchBtn').disabled = false; }
+});
+$('destAddress').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); $('searchBtn').click(); } });
+$('destAddress').addEventListener('focus', () => {
+  showDestSuggestions($('destAddress').value.trim());
+});
+$('destAddress').addEventListener('input', () => {
+  showDestSuggestions($('destAddress').value.trim());
+});
+
+/* ---- pick destination by tapping a map (free OpenStreetMap/Leaflet,
+   no API key — fallback for addresses the geocoder can't find) ---- */
+let pickerMap = null, pickerMarker = null, pickerLatLng = null, myLocationMarker = null;
+function locateMeOnPicker(zoom){
+  if(!navigator.geolocation || !pickerMap) return;
+  const btn = $('mapPickerLocate');
+  if(btn) btn.classList.add('locating');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      pickerMap.setView(ll, zoom || 15);
+      if(myLocationMarker) myLocationMarker.setLatLng(ll);
+      else myLocationMarker = L.circleMarker(ll, {
+        radius: 8, color: '#fff', weight: 2, fillColor: '#4285F4', fillOpacity: 1
+      }).addTo(pickerMap);
+      if(btn) btn.classList.remove('locating');
+    },
+    (err) => {
+      console.warn('Geolocation failed:', err);
+      if(btn) btn.classList.remove('locating');
+    },
+    { timeout: 8000, enableHighAccuracy: true, maximumAge: 10000 }
+  );
+}
+function ensurePickerMap(){
+  if(pickerMap) return;
+  // reasonable starting view (Poland) so the map isn't blank while we wait
+  // for a GPS fix, then zoom in close once we know where the user is
+  pickerMap = L.map('mapPickerMap').setView([52.0, 19.0], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(pickerMap);
+  locateMeOnPicker(15);
+  pickerMap.on('click', async (e) => {
+    pickerLatLng = e.latlng;
+    if(pickerMarker) pickerMarker.setLatLng(e.latlng);
+    else pickerMarker = L.marker(e.latlng).addTo(pickerMap);
+    $('mapPickerConfirm').disabled = false;
+    $('mapPickerName').textContent = t('searching');
+    try{
+      const url = 'https://nominatim.openstreetmap.org/reverse?format=json&accept-language=' + settings.lang
+        + '&lat=' + e.latlng.lat + '&lon=' + e.latlng.lng;
+      const res = await fetch(url, {headers:{'Accept':'application/json'}});
+      const data = await res.json();
+      $('mapPickerName').textContent = data.display_name || (e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5));
+    } catch(err){
+      $('mapPickerName').textContent = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+    }
+  });
+}
+$('mapPickBtn').addEventListener('click', () => {
+  $('mapPickerOverlay').classList.remove('hidden');
+  ensurePickerMap();
+  setTimeout(() => pickerMap && pickerMap.invalidateSize(), 50);
+});
+$('mapPickerClose').addEventListener('click', () => {
+  $('mapPickerOverlay').classList.add('hidden');
+});
+$('mapPickerLocate').addEventListener('click', () => locateMeOnPicker(15));
+$('mapPickerConfirm').addEventListener('click', () => {
+  if(!pickerLatLng) return;
+  const nameText = $('mapPickerName').textContent || (pickerLatLng.lat.toFixed(5) + ', ' + pickerLatLng.lng.toFixed(5));
+  selectDestination({
+    lat: pickerLatLng.lat, lon: pickerLatLng.lng,
+    shortName: nameText.split(',')[0], fullName: nameText
+  });
+  $('mapPickerOverlay').classList.add('hidden');
+});
+
+/* ---- start point (defaults to GPS, like Google Maps) ---- */
+function selectStartPoint(r){
+  startMode = 'custom';
+  startCustomLat = parseFloat(r.lat);
+  startCustomLng = parseFloat(r.lon);
+  startCustomName = r.shortName;
+  $('startResultsList').classList.add('hidden');
+  $('startResultsList').innerHTML = '';
+  $('startAddress').value = '';
+  $('startSearchArea').classList.add('hidden');
+  $('startCurrentText').textContent = '📍 ' + r.shortName;
+}
+$('startChangeBtn').addEventListener('click', () => {
+  $('startSearchArea').classList.toggle('hidden');
+});
+$('startUseGpsBtn').addEventListener('click', () => {
+  startMode = 'gps';
+  startCustomLat = startCustomLng = startCustomName = undefined;
+  $('startCurrentText').textContent = t('startCurrentGps');
+  $('startSearchArea').classList.add('hidden');
+});
+$('startSearchBtn').addEventListener('click', async () => {
+  const query = $('startAddress').value.trim();
+  const statusEl = $('setupStatus');
+  statusEl.classList.remove('error');
+  if(!query){ statusEl.textContent = t('errFillStart'); statusEl.classList.add('error'); return; }
+  $('startSearchBtn').disabled = true;
+  statusEl.textContent = t('searching');
+  try{
+    const results = await geocodeAddress(query);
+    statusEl.textContent = '';
+    renderGenericResults($('startResultsList'), results, statusEl, selectStartPoint);
+  } catch(e){
+    console.warn('Search error:', e);
+    statusEl.textContent = t('errSearchFail') + ' (' + e.message + '). ' + t('errCheckNet');
+    statusEl.classList.add('error');
+  } finally { $('startSearchBtn').disabled = false; }
+});
+$('startAddress').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); $('startSearchBtn').click(); } });
+
+async function resolveStartPoint(){
+  if(startMode === 'custom' && startCustomLat !== undefined){
+    return {lat:startCustomLat, lng:startCustomLng};
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({lat:pos.coords.latitude, lng:pos.coords.longitude}),
+      err => reject(err),
+      {enableHighAccuracy:true, timeout:15000}
+    );
+  });
+}
+
+$('startBtn').addEventListener('click', async () => {
+  const statusEl = $('setupStatus');
+  statusEl.classList.remove('error');
+
+  if(destLat === undefined || destLng === undefined){
+    statusEl.textContent = t('errPickDest');
+    statusEl.classList.add('error');
+    return;
+  }
+
+  statusEl.textContent = t('statusLocating');
+  $('startBtn').disabled = true;
+
+  let startPos;
+  try{
+    startPos = await resolveStartPoint();
+  } catch(err){
+    statusEl.textContent = t('errGps') + ' ' + err.message + '. ' + t('errGpsCheck');
+    statusEl.classList.add('error');
+    $('startBtn').disabled = false;
+    return;
+  }
+  startLat = startPos.lat;
+  startLng = startPos.lng;
+
+  routePoints = null;
+  routeCumDist = null;
+  usingRoute = false;
+  routeMeta.segments = null;
+  progressBase = 0;
+  arrivalCelebrated = false;
+  routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+  resetTripLog();
+  logTripEvent('trip_started', {startLat, startLng, destLat, destLng});
+
+  if(settings.forceStraightLine){
+    totalDistance = haversine(startLat, startLng, destLat, destLng);
+    usingRoute = false;
+  } else {
+    statusEl.textContent = t('statusRouting');
+    try{
+      const route = await fetchRoute(startLat, startLng, destLat, destLng);
+      routePoints = route.points;
+      routeCumDist = route.cum;
+      totalDistance = route.totalKm;
+      usingRoute = true;
+      buildSegmentMeta();
+    } catch(e){
+      console.warn('Nie udało się pobrać trasy drogowej, przełączam na linię prostą:', e);
+      totalDistance = haversine(startLat, startLng, destLat, destLng);
+      usingRoute = false;
+    }
+  }
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+
+  if(totalDistance < 0.05){
+    statusEl.textContent = t('errAlreadyThere');
+    statusEl.classList.add('error');
+    $('startBtn').disabled = false;
+    return;
+  }
+
+  maxProgress = 0;
+  $('setupScreen').classList.add('hidden');
+  $('boardScreen').classList.remove('hidden');
+  resetRouteMapView();
+  buildBoard();
+  renderProgress(0);
+  saveTripState();
+
+  updateRouteModeIcon();
+
+  requestWakeLock();
+  startTracking();
+  $('startBtn').disabled = false;
+});
+
+/* ---- live theme switch on the board screen — changes the visual style
+   of the current, already-running trip without ending it (handy for
+   quickly comparing how the same trip looks in each theme) ---- */
+function renderThemeSwitchPopover(){
+  const pop = $('themeSwitchPopover');
+  pop.innerHTML = '';
+  Object.keys(THEME_STYLE).forEach(key => {
+    const th = themeInfo(key);
+    const btn = document.createElement('button');
+    if(key === settings.theme) btn.classList.add('active');
+    btn.innerHTML = '<span class="em">' + th.emoji + '</span><span>' + th.label + '</span>';
+    btn.addEventListener('click', () => {
+      settings.theme = key;
+      buildBoard();
+      renderProgress(maxProgress);
+      saveTripState();
+      $('themeSwitchPopover').classList.add('hidden');
+    });
+    pop.appendChild(btn);
+  });
+}
+$('themeSwitchBtn').addEventListener('click', () => {
+  const pop = $('themeSwitchPopover');
+  if(pop.classList.contains('hidden')){
+    renderThemeSwitchPopover();
+    pop.classList.remove('hidden');
+  } else {
+    pop.classList.add('hidden');
+  }
+});
+
+/* ---- route map view: an alternate view of the board that shows the
+   actual route on a real map (Leaflet/OSM) instead of tiles — the route
+   line is the same geometry already used for progress tracking, and the
+   car marker uses the real GPS fix, so if the driver takes a different
+   road the marker will visibly drift off the drawn line until the
+   existing route-recalculation logic redraws it.
+   Tapping the button cycles: board only -> map only -> both split -> board only ---- */
+let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapCarMarker = null,
+    routeMapStartMarker = null, routeMapDestMarker = null,
+    boardViewMode = 'board'; // 'board' | 'map' | 'split'
+
+function ensureRouteMap(){
+  if(routeMap) return;
+  routeMap = L.map('routeMapCanvas', { zoomControl:true, attributionControl:true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(routeMap);
+}
+
+function renderRouteMap(fitBounds){
+  if(!routeMap || destLat === undefined) return;
+  // startLat/startLng aren't persisted across a resumed trip, so fall back
+  // to the route's own first point, then to the last known GPS fix
+  const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
+  const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
+  if(!currentPos) return; // nothing usable to draw yet
+  const curLatLng = [currentPos.lat, currentPos.lng];
+
+  let donePoints, todoPoints;
+  if(usingRoute && routePoints && routePoints.length > 1){
+    // split the route geometry at the segment we last matched to, so the
+    // covered part can be drawn in a different colour from what's left
+    const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
+    donePoints = routePoints.slice(0, idx + 1).concat([curLatLng]);
+    todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
+  } else {
+    const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
+    donePoints = [startPt, curLatLng];
+    todoPoints = [curLatLng, [destLat, destLng]];
+  }
+
+  if(routeMapLineDone) routeMap.removeLayer(routeMapLineDone);
+  if(routeMapLineTodo) routeMap.removeLayer(routeMapLineTodo);
+  routeMapLineDone = L.polyline(donePoints, { color:'#3FAE6A', weight:5, opacity:.9 }).addTo(routeMap);
+  routeMapLineTodo = L.polyline(todoPoints, { color:'#FF6B5B', weight:5, opacity:.85 }).addTo(routeMap);
+
+  const startPoint = routeStart || currentPos;
+  if(!routeMapStartMarker){
+    routeMapStartMarker = L.circleMarker([startPoint.lat, startPoint.lng], { radius:7, color:'#fff', weight:2, fillColor:'#39B6E0', fillOpacity:1 }).addTo(routeMap);
+  } else routeMapStartMarker.setLatLng([startPoint.lat, startPoint.lng]);
+
+  if(!routeMapDestMarker){
+    routeMapDestMarker = L.marker([destLat, destLng]).addTo(routeMap);
+  } else routeMapDestMarker.setLatLng([destLat, destLng]);
+
+  updateRouteMapCarPosition();
+
+  if(fitBounds){
+    const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
+    routeMap.fitBounds(bounds, { padding:[24,24] });
+  }
+}
+
+// keeps the car marker on the driver's real GPS position — deliberately
+// NOT interpolated from the progress percentage, so a driver on a
+// different road shows up visibly off the drawn route line instead of
+// looking like they're on track when they aren't
+function updateRouteMapCarPosition(){
+  if(!routeMap || boardViewMode === 'board') return;
+  const pos = gpsState.lastPosition || (routePoints && routePoints[0] ? {lat:routePoints[0][0], lng:routePoints[0][1]} : (startLat !== undefined ? {lat:startLat, lng:startLng} : null));
+  if(!pos) return;
+  const theme = activeThemeInfo();
+  if(!routeMapCarMarker){
+    const icon = L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
+    routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
+  } else {
+    routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
+  }
+}
+
+function applyBoardViewMode(){
+  $('roadWrap').classList.toggle('hidden', boardViewMode === 'map');
+  $('routeMapWrap').classList.toggle('hidden', boardViewMode === 'board');
+  $('mapViewBtn').classList.toggle('active', boardViewMode !== 'board');
+  $('mapViewBtn').title = boardViewMode === 'board' ? t('mapViewShowTitle')
+    : boardViewMode === 'map' ? t('mapViewSplitTitle') : t('mapViewHideTitle');
+  if(boardViewMode !== 'board'){
+    ensureRouteMap();
+    setTimeout(() => {
+      routeMap.invalidateSize();
+      renderRouteMap(true);
+    }, 0);
+  }
+}
+
+function resetRouteMapView(){
+  boardViewMode = 'board';
+  applyBoardViewMode();
+  if(routeMapLineDone && routeMap){ routeMap.removeLayer(routeMapLineDone); routeMapLineDone = null; }
+  if(routeMapLineTodo && routeMap){ routeMap.removeLayer(routeMapLineTodo); routeMapLineTodo = null; }
+  if(routeMapCarMarker && routeMap){ routeMap.removeLayer(routeMapCarMarker); routeMapCarMarker = null; }
+  if(routeMapStartMarker && routeMap){ routeMap.removeLayer(routeMapStartMarker); routeMapStartMarker = null; }
+  if(routeMapDestMarker && routeMap){ routeMap.removeLayer(routeMapDestMarker); routeMapDestMarker = null; }
+}
+
+$('mapViewBtn').addEventListener('click', () => {
+  $('themeSwitchPopover').classList.add('hidden');
+  boardViewMode = boardViewMode === 'board' ? 'map' : boardViewMode === 'map' ? 'split' : 'board';
+  applyBoardViewMode();
+  if(boardViewMode !== 'map') buildBoard(); // roadWrap was hidden (className got reset) — rebuild so tiles reappear correctly
+  if(boardViewMode !== 'board') renderProgress(maxProgress);
+});
+
+$('routeMapFitBtn').addEventListener('click', () => {
+  if(!routeMap || !routeMapLineDone || !routeMapLineTodo) return;
+  const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
+  routeMap.fitBounds(bounds, { padding:[24,24] });
+});
+
+$('resetBtn').addEventListener('click', () => {
+  $('themeSwitchPopover').classList.add('hidden');
+  resetRouteMapView();
+  stopTracking();
+  releaseWakeLock();
+  clearTripState();
+  destLat = destLng = destName = undefined;
+  startMode = 'gps';
+  startCustomLat = startCustomLng = startCustomName = undefined;
+  $('startCurrentText').textContent = t('startCurrentGps');
+  $('startSearchArea').classList.add('hidden');
+  routePoints = null;
+  routeCumDist = null;
+  usingRoute = false;
+  routeMeta.segments = null;
+  progressBase = 0;
+  arrivalCelebrated = false;
+  dismissConfetti();
+  routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
+  // NOTE: deliberately NOT clearing the diagnostic log here — this handler
+  // just returns you to the setup screen, and clearing now would erase the
+  // log for the trip you just finished before you get a chance to copy it
+  // from Options. It's reset instead at the moment a new trip actually
+  // starts (see trip_started above).
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+  $('destChip').classList.add('hidden');
+  $('destAddress').value = '';
+  $('resultsList').classList.add('hidden');
+  $('resultsList').innerHTML = '';
+  $('startBtn').disabled = true;
+  $('boardScreen').classList.add('hidden');
+  $('setupScreen').classList.remove('hidden');
+  $('resumeBanner').classList.add('hidden');
+  $('setupFormArea').classList.remove('hidden');
+  $('setupStatus').textContent = '';
+  $('boardStatus').textContent = '';
+});
+
+/* ---------- OPTIONS / THEME / LANGUAGE UI ---------- */
+function updateThemePreview(){
+  const th = activeThemeInfo();
+  $('themePreviewEmoji').textContent = th.emoji;
+  let txt = t('themePrefix') + ' ' + th.label + ' · ' + settings.tileCount + ' ' + t('tilesSuffix');
+  if(settings.forceStraightLine) txt += ' · ' + t('straightSuffix');
+  $('themePreviewText').textContent = txt;
+}
+
+function renderThemeGrid(){
+  const grid = $('themeGrid');
+  grid.innerHTML = '';
+  Object.keys(THEME_STYLE).forEach(key => {
+    const th = themeInfo(key);
+    const card = document.createElement('div');
+    card.className = 'theme-card' + (settings.theme === key ? ' selected' : '');
+    card.innerHTML = `<span class="em">${th.emoji}</span><span class="lb">${th.label}</span><span class="shape">${th.shape}</span>`;
+    card.addEventListener('click', () => {
+      settings.theme = key;
+      renderThemeGrid();
+      updateThemePreview();
+    });
+    grid.appendChild(card);
+  });
+}
+
+function applyStaticTexts(){
+  $('badgeText').textContent = t('badge');
+  $('titleText').innerHTML = t('titleHtml');
+  $('subtitleText').textContent = t('subtitle');
+  $('themePreviewEdit').textContent = t('change');
+
+  $('startCardTitle').textContent = t('startCardTitle');
+  if(startMode === 'gps') $('startCurrentText').textContent = t('startCurrentGps');
+  $('startChangeBtn').textContent = t('change');
+  $('startAddress').placeholder = t('startAddressPlaceholder');
+  $('startSearchBtn').textContent = t('searchBtn');
+  $('startUseGpsBtn').textContent = t('startUseGps');
+
+  $('destCardTitle').textContent = t('destCardTitle');
+  $('destAddressLabel').textContent = t('destAddressLabel');
+  $('destAddress').placeholder = t('destAddressPlaceholder');
+  $('searchBtn').textContent = t('searchBtn');
+  $('mapPickBtnText').textContent = t('mapPickBtnText');
+  $('mapPickerTitle').textContent = t('mapPickerTitle');
+  $('mapPickerConfirm').textContent = t('mapPickerConfirm');
+  $('destClearBtn').textContent = t('change');
+  $('startBtn').textContent = t('startBtn');
+  $('setupFooterNote').textContent = t('setupFooterNote');
+
+  $('optionsTitle').textContent = t('optionsTitle');
+  $('langCardTitle').textContent = t('langCardTitle');
+  $('langBtnPl').textContent = t('langPl');
+  $('langBtnEn').textContent = t('langEn');
+  $('themeCardTitle').textContent = t('themeCardTitle');
+  $('themeCardHint').textContent = t('themeCardHint');
+  $('tileCardTitle').textContent = t('tileCardTitle');
+  $('tileCardHint').textContent = t('tileCardHint');
+  $('straightLineLabel').textContent = t('straightLineLabel');
+  $('straightLineSub').textContent = t('straightLineSub');
+  $('diagCardTitle').textContent = t('diagCardTitle');
+  $('diagCardHint').textContent = t('diagCardHint');
+  $('diagCopyBtn').textContent = t('diagCopyBtn');
+  $('diagClearBtn').textContent = t('diagClearBtn');
+  $('optionsDoneBtn').textContent = t('optionsDoneBtn');
+
+  $('statPercentLbl').textContent = t('statPercentLbl');
+  $('statKmLbl').textContent = t('statKmLbl');
+  $('resetBtn').textContent = t('resetBtn');
+  if(typeof boardViewMode !== 'undefined') applyBoardViewMode();
+
+  $('langQuickBtn').textContent = settings.lang.toUpperCase();
+  $('langBtnPl').classList.toggle('selected', settings.lang === 'pl');
+  $('langBtnEn').classList.toggle('selected', settings.lang === 'en');
+
+  renderThemeGrid();
+  updateThemePreview();
+}
+
+function setLang(lang){
+  settings.lang = lang;
+  document.documentElement.lang = lang;
+  applyStaticTexts();
+}
+
+let optionsReturnScreen = 'setup';
+function openOptions(){
+  // remember whether we came from the setup screen or from an active trip
+  // (board screen), so Options can be reached mid-trip — e.g. to copy the
+  // diagnostic log — without having to end the trip first
+  optionsReturnScreen = $('boardScreen').classList.contains('hidden') ? 'setup' : 'board';
+  $('setupScreen').classList.add('hidden');
+  $('boardScreen').classList.add('hidden');
+  $('optionsScreen').classList.remove('hidden');
+  renderThemeGrid();
+  $('tileCountRange').value = settings.tileCount;
+  $('tileCountNum').value = settings.tileCount;
+  $('forceStraightToggle').checked = settings.forceStraightLine;
+  $('diagLogArea').value = tripLogAsText();
+}
+function closeOptions(){
+  $('optionsScreen').classList.add('hidden');
+  if(optionsReturnScreen === 'board'){
+    $('boardScreen').classList.remove('hidden');
+    // the route map's container was hidden while Options was open — Leaflet
+    // needs an explicit invalidateSize (and a redraw) once it's visible
+    // again, same as when first switching into map view, or it can render
+    // blank/misaligned
+    if(boardViewMode !== 'board' && routeMap){
+      setTimeout(() => { routeMap.invalidateSize(); renderRouteMap(true); }, 0);
+    }
+  } else {
+    $('setupScreen').classList.remove('hidden');
+    updateThemePreview();
+  }
+}
+
+$('gearBtn').addEventListener('click', openOptions);
+$('boardGearBtn').addEventListener('click', openOptions);
+$('themePreviewEdit').addEventListener('click', openOptions);
+$('optionsBackBtn').addEventListener('click', closeOptions);
+$('optionsDoneBtn').addEventListener('click', closeOptions);
+$('langQuickBtn').addEventListener('click', () => setLang(settings.lang === 'pl' ? 'en' : 'pl'));
+$('langBtnPl').addEventListener('click', () => setLang('pl'));
+$('langBtnEn').addEventListener('click', () => setLang('en'));
+
+$('tileCountRange').addEventListener('input', () => {
+  settings.tileCount = parseInt($('tileCountRange').value, 10);
+  $('tileCountNum').value = settings.tileCount;
+  updateThemePreview();
+});
+$('tileCountNum').addEventListener('change', () => {
+  let v = parseInt($('tileCountNum').value, 10);
+  if(isNaN(v)) v = 100;
+  v = Math.max(10, Math.min(300, v));
+  settings.tileCount = v;
+  $('tileCountNum').value = v;
+  $('tileCountRange').value = v;
+  updateThemePreview();
+});
+$('forceStraightToggle').addEventListener('change', () => {
+  settings.forceStraightLine = $('forceStraightToggle').checked;
+  updateThemePreview();
+});
+
+$('diagCopyBtn').addEventListener('click', async () => {
+  const area = $('diagLogArea');
+  area.value = tripLogAsText();
+  try{
+    await navigator.clipboard.writeText(area.value);
+  } catch(e){
+    // clipboard API can fail/be unavailable — fall back to select-and-copy
+    area.select();
+    try{ document.execCommand('copy'); } catch(e2){}
+  }
+});
+$('diagClearBtn').addEventListener('click', () => {
+  resetTripLog();
+  $('diagLogArea').value = tripLogAsText();
+});
+
+applyStaticTexts();
+document.documentElement.lang = settings.lang;
+checkForSavedTrip();
+
+/* register the service worker so the app can open with no internet
+   (e.g. airplane mode) once it's been visited online at least once */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
