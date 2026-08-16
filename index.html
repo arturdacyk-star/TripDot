@@ -901,7 +901,8 @@ function checkForSavedTrip(){
     gpsState = {
       lastAcceptedIndex: indexForProgress(maxProgress),
       lastAcceptedProgress: maxProgress,
-      lastPosition: null, lastTimestamp: 0, pendingJump: null
+      lastPosition: null, lastTimestamp: 0, pendingJump: null,
+      lastRawPosition: null, lastRawTimestamp: 0
     };
     routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
     logTripEvent('trip_resumed', {});
@@ -1361,7 +1362,7 @@ $('confettiOverlay').addEventListener('click', dismissConfetti);
    dokładniejsze. Dodatkowo porównujemy kierunek jazdy z kierunkiem odcinka,
    żeby nie pomylić np. mostu z równoległą drogą serwisową pod spodem.
 */
-let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
+let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
 let routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
 let routeMeta = {segments:null};
 
@@ -1435,9 +1436,16 @@ function projectGpsToRoute(lat, lng, accuracy){
   const end = Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
   let best = null;
   let move = 0, gpsBearing = null;
-  if(gpsState.lastPosition && gpsState.lastTimestamp){
-    move = haversine(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
-    gpsBearing = bearing(gpsState.lastPosition.lat, gpsState.lastPosition.lng, lat, lng);
+  // heading is computed from the raw, always-updated previous GPS fix —
+  // NOT gpsState.lastPosition, which only advances when a fix is accepted.
+  // While several fixes in a row are off-route (each returns early without
+  // touching lastPosition), lastPosition would otherwise stay frozen at an
+  // increasingly stale point, producing a bearing that no longer reflects
+  // where you're actually currently heading — that was causing spurious,
+  // repeated headingMismatch flags right after a fresh recalculation.
+  if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
+    move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+    gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
   }
   const testRange = (from, to) => {
     for(let i = from; i <= to; i++){
@@ -1509,7 +1517,15 @@ function acceptProgressFromGps(pos){
   if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
   const now = performance.now();
 
+  // projectGpsToRoute needs the PREVIOUS raw fix (to compute heading), so
+  // read the match first — then advance lastRawPosition/lastRawTimestamp
+  // to this fix. This must happen unconditionally, before any early
+  // return below, or lastRawPosition freezes while off-route and heading
+  // ends up computed against an increasingly stale point (see
+  // projectGpsToRoute for the full explanation).
   const match = usingRoute ? projectGpsToRoute(lat, lng, accuracy) : null;
+  gpsState.lastRawPosition = {lat, lng};
+  gpsState.lastRawTimestamp = now;
   let fraction, matchedIndex = 0;
 
   if(usingRoute && match){
@@ -2008,7 +2024,7 @@ $('startBtn').addEventListener('click', async () => {
       usingRoute = false;
     }
   }
-  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
 
   if(totalDistance < 0.05){
     statusEl.textContent = t('errAlreadyThere');
@@ -2206,7 +2222,7 @@ $('resetBtn').addEventListener('click', () => {
   // log for the trip you just finished before you get a chance to copy it
   // from Options. It's reset instead at the moment a new trip actually
   // starts (see trip_started above).
-  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null};
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
   $('destChip').classList.add('hidden');
   $('destAddress').value = '';
   $('resultsList').classList.add('hidden');
