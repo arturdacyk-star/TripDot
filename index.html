@@ -759,7 +759,7 @@ function activeThemeInfo(){ return themeInfo(settings.theme); }
 let destLat, destLng, destName;
 let startMode = 'gps'; // 'gps' | 'custom'
 let startCustomLat, startCustomLng, startCustomName;
-let startLat, startLng, totalDistance;
+let startLat, startLng, totalDistance, originalTotalDistance;
 let routePoints = null;
 let routeCumDist = null;
 let usingRoute = false;
@@ -916,7 +916,7 @@ function saveTripState(){
   try{
     const data = {
       destLat, destLng, destName,
-      totalDistance, usingRoute, routePoints, routeCumDist,
+      totalDistance, originalTotalDistance, usingRoute, routePoints, routeCumDist,
       maxProgress, progressBase,
       theme:settings.theme, tileCount:settings.tileCount,
       forceStraightLine:settings.forceStraightLine, lang:settings.lang,
@@ -958,6 +958,7 @@ function checkForSavedTrip(){
 
     destLat = saved.destLat; destLng = saved.destLng; destName = saved.destName;
     totalDistance = saved.totalDistance;
+    originalTotalDistance = saved.originalTotalDistance || saved.totalDistance;
     usingRoute = !!saved.usingRoute;
     routePoints = saved.routePoints || null;
     routeCumDist = saved.routeCumDist || null;
@@ -1755,7 +1756,23 @@ function updateRouteModeIcon(){
 async function recalcRouteFromCurrentPosition(lat, lng){
   try{
     const newRoute = await fetchRoute(lat, lng, destLat, destLng);
-    progressBase = maxProgress; // lock in what's already been covered — the board never rewinds
+    // maxProgress can be badly stale (e.g. after a long background pause —
+    // real travel happened while GPS updates were paused, so maxProgress
+    // still reflects wherever we were BEFORE that gap). Blindly locking
+    // progressBase to the stale maxProgress would leave the board stuck
+    // showing the old position forever, only creeping forward from there
+    // as driving continues on the freshly recalculated route. Instead,
+    // derive progress from the real remaining distance just measured
+    // (newRoute.totalKm, from current position to destination) against the
+    // fixed original trip distance — this self-corrects to the true
+    // position regardless of how long we were out of sync. Never rewind:
+    // take whichever of the two is further along.
+    const distanceBasedProgress = originalTotalDistance > 0.01
+      ? clamp(1 - (newRoute.totalKm / originalTotalDistance), 0, 1)
+      : maxProgress;
+    progressBase = Math.max(maxProgress, distanceBasedProgress);
+    maxProgress = progressBase;
+    gpsState.lastAcceptedProgress = maxProgress;
     routePoints = newRoute.points;
     routeCumDist = newRoute.cum;
     totalDistance = newRoute.totalKm;
@@ -1766,22 +1783,30 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     gpsState.pendingJump = null;
     updateRouteModeIcon();
     saveTripState();
-    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length});
+    renderProgress(maxProgress);
+    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length, progressBase: +progressBase.toFixed(3)});
   } catch(e){
     // no route (e.g. offline) — don't get stuck waiting forever on a route
     // that no longer matches; fall back to straight-line distance from here
     console.warn('Route recalculation failed, switching to straight-line distance:', e);
     logTripEvent('recalc_failed', {lat, lng, mapboxError: e && e.mapboxError, osrmError: e && e.osrmError, message: e && e.message});
-    progressBase = maxProgress;
+    const remainingKm = haversine(lat, lng, destLat, destLng);
+    const distanceBasedProgress = originalTotalDistance > 0.01
+      ? clamp(1 - (remainingKm / originalTotalDistance), 0, 1)
+      : maxProgress;
+    progressBase = Math.max(maxProgress, distanceBasedProgress);
+    maxProgress = progressBase;
+    gpsState.lastAcceptedProgress = maxProgress;
     usingRoute = false;
     routePoints = null;
     routeCumDist = null;
     routeMeta.segments = null;
-    totalDistance = haversine(lat, lng, destLat, destLng);
+    totalDistance = remainingKm;
     gpsState.lastAcceptedIndex = 0;
     gpsState.pendingJump = null;
     updateRouteModeIcon();
     saveTripState();
+    renderProgress(maxProgress);
     // sticky for its full 6s so the very next routine GPS status update
     // can't immediately overwrite/hide it (this used to happen — the
     // error could fire and vanish within a second, invisible to a driver)
@@ -2125,6 +2150,11 @@ $('startBtn').addEventListener('click', async () => {
       usingRoute = false;
     }
   }
+  // fixed for the whole trip — used to correctly recompute overall progress
+  // (as "how much of the original distance is left") whenever the route
+  // gets recalculated mid-trip, since totalDistance itself is overwritten
+  // on every recalculation to reflect only the remaining segment
+  originalTotalDistance = totalDistance;
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
 
   if(totalDistance < 0.05){
