@@ -890,6 +890,24 @@ function releaseWakeLock(){
 document.addEventListener('visibilitychange', async () => {
   if(document.visibilityState === 'visible' && !$('boardScreen').classList.contains('hidden')){
     await requestWakeLock();
+    // coming back from being backgrounded/minimized: real travel may have
+    // happened while GPS updates were paused/throttled, landing well
+    // outside projectGpsToRoute's normal narrow search window — force one
+    // full-route search so the board can actually find where we are now,
+    // instead of staying stuck at the old position (see projectGpsToRoute
+    // and the jump-plausibility check in acceptProgressFromGps for the
+    // full explanation). Also get an immediate fix rather than waiting for
+    // the next watchPosition tick, which itself can be slow to resume.
+    if(watchId !== null){
+      gpsState.forceFullSearch = true;
+      try{
+        navigator.geolocation.getCurrentPosition(
+          pos => acceptProgressFromGps(pos),
+          () => {},
+          { enableHighAccuracy:true, maximumAge:0, timeout:10000 }
+        );
+      } catch(e){}
+    }
   }
 });
 
@@ -1497,8 +1515,17 @@ function angleDiff(a, b){ return Math.abs((a - b + 540) % 360 - 180); }
 
 function projectGpsToRoute(lat, lng, accuracy){
   if(!routePoints || routePoints.length < 2 || !routeMeta.segments) return null;
-  const start = Math.max(0, gpsState.lastAcceptedIndex - 20);
-  const end = Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
+  // normally we only look near where we last knew we were (see note below)
+  // — but after the tab/app was backgrounded for a while, real travel can
+  // land far outside that window, and the window-limited search then can
+  // never find the true position again (it can only ever compare against
+  // segments near the OLD, stale position) — a permanent stuck board with
+  // no error shown. forceFullSearch is set once on resuming visibility to
+  // break out of that deadlock with a single full-route search.
+  const fullSearch = !!gpsState.forceFullSearch;
+  gpsState.forceFullSearch = false;
+  const start = fullSearch ? 0 : Math.max(0, gpsState.lastAcceptedIndex - 20);
+  const end = fullSearch ? (routeMeta.segments.length - 1) : Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
   let best = null;
   let move = 0, gpsBearing = null;
   // heading is computed from the raw, always-updated previous GPS fix —
@@ -1639,10 +1666,19 @@ function acceptProgressFromGps(pos){
   // reject GPS jumps that are physically implausible in the elapsed time,
   // unless the same jump repeats (then it's probably real, e.g. a tunnel exit)
   const jump = fraction - gpsState.lastAcceptedProgress;
-  const previous = gpsState.lastPosition;
   const elapsed = Math.max(0.5, (now - gpsState.lastTimestamp) / 1000);
-  const physicalMove = previous ? haversine(previous.lat, previous.lng, lat, lng) : 0;
-  const maxReasonableJump = Math.max(0.025, Math.min(0.12, (physicalMove + Math.max(accuracy,30)/1000*2) / Math.max(1, elapsed*2)));
+  // how big a jump in *trip fraction* is plausible given how much time has
+  // passed: a generous max speed (~200 km/h, covers any road vehicle plus
+  // GPS slop) times elapsed seconds, expressed as a share of the whole
+  // trip. This scales UP with elapsed time — the longer the gap (e.g. the
+  // app was backgrounded/minimized for a while), the more distance is
+  // plausible, so the allowance must grow, not shrink. It previously
+  // divided by elapsed instead, which meant a long background pause
+  // produced a near-zero allowance and permanently rejected the correct
+  // progress jump on resuming, leaving the board stuck at its old position
+  // indefinitely.
+  const maxPlausibleSpeedKmPerSec = 0.056;
+  const maxReasonableJump = Math.max(0.025, Math.min(1, (maxPlausibleSpeedKmPerSec * elapsed) / Math.max(0.1, totalDistance)));
 
   if(jump > maxReasonableJump && gpsState.lastAcceptedProgress < 0.95){
     if(gpsState.pendingJump && Math.abs(gpsState.pendingJump.fraction - fraction) < 0.04){
