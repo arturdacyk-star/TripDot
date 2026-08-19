@@ -1246,7 +1246,25 @@ function buildPathTiles(wrap, theme, count){
   poly.setAttribute('stroke-linejoin', 'round');
   poly.setAttribute('opacity', '0.9');
   svg.appendChild(poly);
+  // a second line on top, colored like a completed tile, revealed
+  // progressively (via stroke-dasharray) as the trip advances — so the
+  // traveled portion of the path reads as one continuous colored route
+  // instead of only the dots themselves changing color
+  const progressPoly = document.createElementNS(svgNS, 'polyline');
+  progressPoly.setAttribute('points', poly.getAttribute('points'));
+  progressPoly.setAttribute('fill', 'none');
+  progressPoly.setAttribute('stroke', theme.tileDone);
+  progressPoly.setAttribute('stroke-width', Math.max(2, size * 0.55));
+  progressPoly.setAttribute('stroke-linecap', 'round');
+  progressPoly.setAttribute('stroke-linejoin', 'round');
+  progressPoly.id = 'pathProgressLine';
+  svg.appendChild(progressPoly);
   wrap.appendChild(svg);
+  // dasharray/dashoffset needs the element in the DOM (for getTotalLength)
+  // and starts fully hidden — renderProgress() reveals it as trip progresses
+  const pathLen = progressPoly.getTotalLength ? progressPoly.getTotalLength() : 0;
+  progressPoly.style.strokeDasharray = pathLen;
+  progressPoly.style.strokeDashoffset = pathLen;
 
   centers.forEach((c, i) => {
     const tl = document.createElement('div');
@@ -1317,10 +1335,14 @@ function buildBoard(){
   buildDecor(theme);
   const wrap = $('roadWrap');
   wrap.innerHTML = '';
+  // +1: the finish tile is a dedicated extra tile beyond the user-configured
+  // count, not the last of the count tiles itself — see renderProgress for
+  // why (otherwise the car "parks" on a finish-looking tile for the whole
+  // final tile's worth of distance before really arriving).
   if(theme.layout === 'grid'){
-    buildGridTiles(wrap, theme, settings.tileCount);
+    buildGridTiles(wrap, theme, settings.tileCount + 1);
   } else {
-    buildPathTiles(wrap, theme, settings.tileCount);
+    buildPathTiles(wrap, theme, settings.tileCount + 1);
   }
 }
 
@@ -1357,9 +1379,15 @@ function renderProgress(fraction){
     buildBoard();
   }
 
-  const totalTiles = boardTileCount || count;
-  const filledTiles = Math.floor(fraction * totalTiles);
-  const currentTile = Math.min(totalTiles, filledTiles + 1);
+  const totalTiles = boardTileCount || (count + 1);
+  // the finish tile is a dedicated extra tile beyond the count route tiles
+  // (see buildBoard) — never reached by ordinary fraction math, only at
+  // true arrival, so it can't look like "arrived" while still 10km out on
+  // a long trip with few tiles.
+  const routeTiles = Math.max(1, totalTiles - 1);
+  const arrived = displayPercent >= 100;
+  const filledTiles = arrived ? routeTiles : Math.min(routeTiles, Math.floor(fraction * routeTiles));
+  const currentTile = arrived ? totalTiles : Math.min(routeTiles, filledTiles + 1);
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // reference: size at 100 tiles
   const carSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
 
@@ -1380,6 +1408,17 @@ function renderProgress(fraction){
     car.style.fontSize = carSize + 'px';
     car.textContent = theme.vehicle;
     cur.appendChild(car);
+  }
+
+  // water/dino themes connect tiles with a line under them; reveal the
+  // completed portion of it in the same "done" color as the tiles, so the
+  // traveled path reads as one continuous colored route, not just dots
+  const pathLine = document.getElementById('pathProgressLine');
+  if(pathLine && pathLine.getTotalLength){
+    const len = pathLine.getTotalLength();
+    const revealFrac = arrived ? 1 : clamp(filledTiles / routeTiles, 0, 1);
+    pathLine.style.strokeDasharray = len;
+    pathLine.style.strokeDashoffset = len * (1 - revealFrac);
   }
 
   $('progressFill').style.width = (fraction*100) + '%';
@@ -1654,13 +1693,22 @@ function acceptProgressFromGps(pos){
   }
   fraction = clamp(fraction, 0, 1);
 
-  // don't let a single noisy fix near the end declare arrival — only accept
-  // fraction===1 once we're also physically close to the destination point
+  // don't let a single noisy fix near the end declare arrival — only jump
+  // to 100% once we're also physically close to the destination point.
+  // Rather than freezing at a flat ceiling the whole time we're "close but
+  // not quite there" (which reads as stuck, then teleports to 100% — this
+  // happens easily since a destination's coordinates are often a bit
+  // offset from the nearest road, e.g. a house set back from the street),
+  // smoothly raise the ceiling from 98% toward 99.9% as the real
+  // straight-line distance shrinks through the last ~500m, so the percent
+  // keeps visibly climbing right up until arrival is actually declared.
   if(fraction >= 0.98){
     const directDist = haversine(lat, lng, destLat, destLng);
-    const arrivalThreshold = Math.max(0.05, (accuracy || 30) / 1000 * 2);
+    const arrivalThreshold = Math.max(0.08, (accuracy || 30) / 1000 * 2);
     if(directDist > arrivalThreshold){
-      fraction = Math.min(fraction, 0.98);
+      const approachWindowKm = 0.5;
+      const proximity = clamp(1 - (directDist - arrivalThreshold) / approachWindowKm, 0, 1);
+      fraction = Math.min(fraction, 0.98 + proximity * 0.011);
     }
   }
 
