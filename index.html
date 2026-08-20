@@ -118,6 +118,11 @@
   .history-scroll-box{
     flex:1; max-height:172px; overflow-y:auto;
     display:flex; flex-direction:column; gap:6px;
+    /* on mobile, scrolling to the top/bottom edge of this list would
+       otherwise "hand off" the remaining touch-scroll to the page behind
+       it (scroll chaining) — contain stops that handoff so only this list
+       scrolls, not the whole screen underneath */
+    overscroll-behavior: contain;
   }
   .history-vslider-wrap{width:28px; display:flex; align-items:center; justify-content:center; overflow:hidden;}
   .history-vslider{
