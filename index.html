@@ -761,6 +761,11 @@ let startMode = 'gps'; // 'gps' | 'custom'
 let startCustomLat, startCustomLng, startCustomName;
 let startLat, startLng, totalDistance, originalTotalDistance;
 let routePoints = null;
+// geometry of route already driven BEFORE each recalculation — accumulated
+// across recalcs (never discarded) so the map can keep showing the whole
+// trip's traveled portion in green even after the active route underneath
+// it changes; see recalcRouteFromCurrentPosition and renderRouteMap
+let completedRoutePoints = [];
 let routeCumDist = null;
 let usingRoute = false;
 let progressBase = 0; // % locked in at the last route recalculation — never goes down
@@ -916,7 +921,7 @@ function saveTripState(){
   try{
     const data = {
       destLat, destLng, destName,
-      totalDistance, originalTotalDistance, usingRoute, routePoints, routeCumDist,
+      totalDistance, originalTotalDistance, usingRoute, routePoints, routeCumDist, completedRoutePoints,
       maxProgress, progressBase,
       theme:settings.theme, tileCount:settings.tileCount,
       forceStraightLine:settings.forceStraightLine, lang:settings.lang,
@@ -962,6 +967,7 @@ function checkForSavedTrip(){
     usingRoute = !!saved.usingRoute;
     routePoints = saved.routePoints || null;
     routeCumDist = saved.routeCumDist || null;
+    completedRoutePoints = saved.completedRoutePoints || [];
     maxProgress = saved.maxProgress || 0;
     progressBase = saved.progressBase || 0;
 
@@ -1444,6 +1450,7 @@ function renderProgress(fraction){
   } else {
     msgEl.textContent = t('msgStart') + ' ' + theme.startIcon;
   }
+  updateRouteMapLineSplit();
   updateRouteMapCarPosition();
 }
 
@@ -1821,6 +1828,14 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     progressBase = Math.max(maxProgress, distanceBasedProgress);
     maxProgress = progressBase;
     gpsState.lastAcceptedProgress = maxProgress;
+    // keep the geometry already driven on the OLD route before it gets
+    // replaced — otherwise the map would lose all trace of everything
+    // covered before this recalculation, showing only the new remaining
+    // route with nothing yet in green
+    if(usingRoute && routePoints && routePoints.length > 1){
+      const oldIdx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 1);
+      completedRoutePoints = completedRoutePoints.concat(routePoints.slice(0, oldIdx + 1));
+    }
     routePoints = newRoute.points;
     routeCumDist = newRoute.cum;
     totalDistance = newRoute.totalKm;
@@ -1845,6 +1860,10 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     progressBase = Math.max(maxProgress, distanceBasedProgress);
     maxProgress = progressBase;
     gpsState.lastAcceptedProgress = maxProgress;
+    if(usingRoute && routePoints && routePoints.length > 1){
+      const oldIdx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 1);
+      completedRoutePoints = completedRoutePoints.concat(routePoints.slice(0, oldIdx + 1));
+    }
     usingRoute = false;
     routePoints = null;
     routeCumDist = null;
@@ -2172,6 +2191,7 @@ $('startBtn').addEventListener('click', async () => {
 
   routePoints = null;
   routeCumDist = null;
+  completedRoutePoints = [];
   usingRoute = false;
   routeMeta.segments = null;
   progressBase = 0;
@@ -2294,13 +2314,16 @@ function renderRouteMap(fitBounds){
   let donePoints, todoPoints;
   if(usingRoute && routePoints && routePoints.length > 1){
     // split the route geometry at the segment we last matched to, so the
-    // covered part can be drawn in a different colour from what's left
+    // covered part can be drawn in a different colour from what's left.
+    // completedRoutePoints prepends whatever was already driven on any
+    // earlier (since-replaced) route from previous recalculations, so the
+    // green portion reflects the whole trip so far, not just this segment.
     const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
-    donePoints = routePoints.slice(0, idx + 1).concat([curLatLng]);
+    donePoints = completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng]);
     todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
   } else {
     const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
-    donePoints = [startPt, curLatLng];
+    donePoints = completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng];
     todoPoints = [curLatLng, [destLat, destLng]];
   }
 
@@ -2324,6 +2347,32 @@ function renderRouteMap(fitBounds){
     const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
     routeMap.fitBounds(bounds, { padding:[24,24] });
   }
+}
+
+// keeps the traveled/remaining portions of the route line correctly
+// colored on every GPS tick. renderRouteMap() only runs on structural
+// changes (recalculation, view toggle, theme switch) — without this, the
+// line's green/orange split stayed frozen at whatever it was during normal
+// driving between those events, even though the car marker itself kept
+// moving every tick (see updateRouteMapCarPosition).
+function updateRouteMapLineSplit(){
+  if(!routeMap || !routeMapLineDone || !routeMapLineTodo || destLat === undefined) return;
+  const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
+  const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
+  if(!currentPos) return;
+  const curLatLng = [currentPos.lat, currentPos.lng];
+  let donePoints, todoPoints;
+  if(usingRoute && routePoints && routePoints.length > 1){
+    const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
+    donePoints = completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng]);
+    todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
+  } else {
+    const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
+    donePoints = completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng];
+    todoPoints = [curLatLng, [destLat, destLng]];
+  }
+  routeMapLineDone.setLatLngs(donePoints);
+  routeMapLineTodo.setLatLngs(todoPoints);
 }
 
 // keeps the car marker on the driver's real GPS position — deliberately
@@ -2420,6 +2469,7 @@ $('resetBtn').addEventListener('click', () => {
   $('startSearchArea').classList.add('hidden');
   routePoints = null;
   routeCumDist = null;
+  completedRoutePoints = [];
   usingRoute = false;
   routeMeta.segments = null;
   progressBase = 0;
