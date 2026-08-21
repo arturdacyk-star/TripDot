@@ -1024,9 +1024,17 @@ function buildCumulativeDistances(points){
   return cum;
 }
 
+async function fetchWithTimeout(url, timeoutMs, options = {}){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, {...options, signal: controller.signal});
+  } finally { clearTimeout(timer); }
+}
+const ROUTE_FETCH_TIMEOUT_MS = 8000;
 async function fetchRouteFromMapbox(sLat, sLng, dLat, dLng){
   const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson&access_token=${MAPBOX_TOKEN}`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, ROUTE_FETCH_TIMEOUT_MS);
   if(!res.ok) throw new Error('Mapbox Directions HTTP ' + res.status);
   const data = await res.json();
   if(!data.routes || data.routes.length === 0) throw new Error('no road route');
@@ -1037,7 +1045,7 @@ async function fetchRouteFromMapbox(sLat, sLng, dLat, dLng){
 }
 async function fetchRouteFromOsrm(sLat, sLng, dLat, dLng){
   const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${dLng},${dLat}?overview=full&geometries=geojson`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, ROUTE_FETCH_TIMEOUT_MS);
   if(!res.ok) throw new Error('OSRM HTTP ' + res.status);
   const data = await res.json();
   if(!data.routes || data.routes.length === 0) throw new Error('no road route');
@@ -1931,14 +1939,14 @@ async function geocodeMapbox(query){
 }
 async function geocodeNominatim(query){
   const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&accept-language=' + settings.lang + '&q=' + encodeURIComponent(query);
-  const res = await fetch(url, {headers: {'Accept': 'application/json'}});
+  const res = await fetchWithTimeout(url, ROUTE_FETCH_TIMEOUT_MS, {headers: {'Accept': 'application/json'}});
   if(!res.ok) throw new Error('Nominatim HTTP ' + res.status);
   const data = await res.json();
   return data.map(r => ({ lat: r.lat, lon: r.lon, shortName: r.display_name.split(',')[0], fullName: r.display_name }));
 }
 async function geocodePhoton(query){
   const url = 'https://photon.komoot.io/api/?limit=5&lang=' + settings.lang + '&q=' + encodeURIComponent(query);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, ROUTE_FETCH_TIMEOUT_MS);
   if(!res.ok) throw new Error('Photon HTTP ' + res.status);
   const data = await res.json();
   return (data.features || []).map(f => {
