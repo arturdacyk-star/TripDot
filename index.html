@@ -926,6 +926,7 @@ function saveTripState(){
   try{
     const data = {
       destLat, destLng, destName,
+      startLat, startLng,
       totalDistance, originalTotalDistance, usingRoute, routePoints, routeCumDist, completedRoutePoints,
       maxProgress, progressBase,
       theme:settings.theme, tileCount:settings.tileCount,
@@ -967,6 +968,7 @@ function checkForSavedTrip(){
     setLang(lang);
 
     destLat = saved.destLat; destLng = saved.destLng; destName = saved.destName;
+    startLat = saved.startLat; startLng = saved.startLng;
     totalDistance = saved.totalDistance;
     originalTotalDistance = saved.originalTotalDistance || saved.totalDistance;
     usingRoute = !!saved.usingRoute;
@@ -2309,9 +2311,13 @@ function ensureRouteMap(){
 
 function renderRouteMap(fitBounds){
   if(!routeMap || destLat === undefined) return;
-  // startLat/startLng aren't persisted across a resumed trip, so fall back
-  // to the route's own first point, then to the last known GPS fix
-  const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
+  // the true start point never moves — prefer it over routePoints[0], which
+  // is only the start of the CURRENT (possibly recalculated) route segment
+  // and drifts to wherever the last recalculation happened from, no longer
+  // marking where the trip actually began
+  const routeStart = (startLat !== undefined)
+    ? {lat:startLat, lng:startLng}
+    : ((routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null);
   const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
   if(!currentPos) return; // nothing usable to draw yet
   const curLatLng = [currentPos.lat, currentPos.lng];
@@ -2335,11 +2341,11 @@ function renderRouteMap(fitBounds){
   if(routeMapLineDone) routeMap.removeLayer(routeMapLineDone);
   if(routeMapLineTodo) routeMap.removeLayer(routeMapLineTodo);
   routeMapLineDone = L.polyline(donePoints, { color:'#3FAE6A', weight:5, opacity:.9 }).addTo(routeMap);
-  routeMapLineTodo = L.polyline(todoPoints, { color:'#FF6B5B', weight:5, opacity:.85 }).addTo(routeMap);
+  routeMapLineTodo = L.polyline(todoPoints, { color:'#2D6CDF', weight:5, opacity:.85 }).addTo(routeMap);
 
   const startPoint = routeStart || currentPos;
   if(!routeMapStartMarker){
-    routeMapStartMarker = L.circleMarker([startPoint.lat, startPoint.lng], { radius:7, color:'#fff', weight:2, fillColor:'#39B6E0', fillOpacity:1 }).addTo(routeMap);
+    routeMapStartMarker = L.circleMarker([startPoint.lat, startPoint.lng], { radius:8, color:'#fff', weight:2, fillColor:'#FFC93C', fillOpacity:1 }).addTo(routeMap);
   } else routeMapStartMarker.setLatLng([startPoint.lat, startPoint.lng]);
 
   if(!routeMapDestMarker){
@@ -2362,7 +2368,9 @@ function renderRouteMap(fitBounds){
 // moving every tick (see updateRouteMapCarPosition).
 function updateRouteMapLineSplit(){
   if(!routeMap || !routeMapLineDone || !routeMapLineTodo || destLat === undefined) return;
-  const routeStart = (routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null;
+  const routeStart = (startLat !== undefined)
+    ? {lat:startLat, lng:startLng}
+    : ((routePoints && routePoints[0]) ? {lat:routePoints[0][0], lng:routePoints[0][1]} : null);
   const currentPos = gpsState.lastPosition || routeStart || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
   if(!currentPos) return;
   const curLatLng = [currentPos.lat, currentPos.lng];
