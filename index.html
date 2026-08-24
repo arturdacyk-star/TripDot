@@ -646,7 +646,8 @@ const I18N = {
       road:{label:'Droga', shape:'siatka wężowa'},
       forest:{label:'Las', shape:'wąska serpentyna'},
       water:{label:'Woda', shape:'meandrująca rzeka'},
-      dino:{label:'Dinozaury', shape:'trop dinozaura'}
+      dino:{label:'Dinozaury', shape:'trop dinozaura'},
+      piggy:{label:'Świnki', shape:'meandrująca ścieżka'}
     }
   },
   en: {
@@ -721,7 +722,8 @@ const I18N = {
       road:{label:'Road', shape:'snake grid'},
       forest:{label:'Forest', shape:'narrow switchback'},
       water:{label:'Water', shape:'meandering river'},
-      dino:{label:'Dinosaurs', shape:'dino footprints'}
+      dino:{label:'Dinosaurs', shape:'dino footprints'},
+      piggy:{label:'Piggies', shape:'meandering path'}
     }
   }
 };
@@ -746,7 +748,12 @@ const THEME_STYLE = {
     bgTop:'#C9D68B', bgBottom:'#EFF3D8', trackBg:'#4B3A2A', trackBgLight:'#5E4A36',
     tileDone:'#9CCC65', startColor:'#F2C14E', finishColor:'#D64545',
     vehicle:'🦖', startIcon:'🥚', finishIcon:'🌋',
-    decor:[{e:'🌋',a:'bob'},{e:'🌿',a:'sway'},{e:'🦴',a:'bob'},{e:'🌿',a:'sway'}] }
+    decor:[{e:'🌋',a:'bob'},{e:'🌿',a:'sway'},{e:'🦴',a:'bob'},{e:'🌿',a:'sway'}] },
+  piggy: { emoji:'🐷', layout:'wave',
+    bgTop:'#FFD1E3', bgBottom:'#FFF3F8', trackBg:'#7A2E52', trackBgLight:'#F4A6C6',
+    tileDone:'#C2185B', startColor:'#FFD9E6', finishColor:'#AD1457',
+    vehicle:'🐷', startIcon:'🎀', finishIcon:'🧁',
+    decor:[{e:'🐽',a:'bob'},{e:'🌸',a:'sway'},{e:'🐖',a:'swim'},{e:'🌸',a:'sway'}] }
 };
 
 function detectDefaultLang(){
