@@ -87,7 +87,7 @@
   .card p.hint{font-size:13px; color:#6b7688; margin:4px 0 14px 0; line-height:1.5;}
   label{display:block; font-size:12px; font-weight:700; color:#6b7688; text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; margin-top:12px;}
   label:first-of-type{margin-top:0;}
-  input[type=text], input[type=number]{
+  input[type=text], input[type=number], input[type=password]{
     width:100%; padding:12px 14px; border-radius:12px; border:2px solid #E4E9F0;
     font-size:16px; font-family:'Nunito'; font-weight:700; color:var(--ink);
     background:#F7F9FC;
@@ -133,6 +133,7 @@
   }
   .status-msg{font-size:13px; text-align:center; margin-top:8px; min-height:16px; color:var(--asphalt);}
   .status-msg.error{color:var(--coral); font-weight:700;}
+  .hint.error{color:var(--coral); font-weight:700;}
   .bottom-actions #resetBtn{background:#fff; border:2px solid #C7CEDA; color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.08);}
 
   .map-picker-overlay{
@@ -475,6 +476,15 @@
   </div>
 
   <div class="card">
+    <h2 id="customThemeCardTitle">🧪 Motyw Custom (AI) — eksperymentalne</h2>
+    <p class="hint" id="customThemeHint">Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).</p>
+    <input type="password" id="customThemeApiKey" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off">
+    <input type="text" id="customThemePrompt" placeholder="np. jednorożce, kosmos, żaby..." style="margin-top:8px;">
+    <button class="secondary-btn" id="customThemeGenerateBtn" style="margin-top:8px;">✨ Generuj motyw</button>
+    <p class="hint" id="customThemeStatus" style="min-height:16px;"></p>
+  </div>
+
+  <div class="card">
     <h2 id="tileCardTitle">🔢 Liczba pól trasy</h2>
     <p class="hint" id="tileCardHint">Od 10 (krótka gra) do 1000 (długa trasa). Domyślnie 100.</p>
     <div class="tile-count-row">
@@ -595,6 +605,17 @@ const I18N = {
     langPl:'Polski', langEn:'English',
     themeCardTitle:'🎨 Motyw planszy',
     themeCardHint:'Każdy motyw ma inny kształt trasy i inne postacie.',
+    customThemeCardTitle:'🧪 Motyw Custom (AI) — eksperymentalne',
+    customThemeHint:'Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).',
+    customThemeApiKeyPlaceholder:'Klucz API Google AI Studio (Gemini)',
+    customThemePromptPlaceholder:'np. jednorożce, kosmos, żaby...',
+    customThemeGenerateBtn:'✨ Generuj motyw',
+    customThemeGenerating:'Generuję motyw…',
+    customThemeNoKey:'Podaj najpierw klucz API.',
+    customThemeNoPrompt:'Opisz jaki motyw ma powstać.',
+    customThemeSuccess:'Gotowe! Motyw wybrany.',
+    customThemeErrorNetwork:'Nie udało się połączyć z API (sprawdź internet i klucz).',
+    customThemeErrorInvalid:'AI zwróciło coś, czego nie dało się zrozumieć — spróbuj ponownie lub inaczej opisz motyw.',
     tileCardTitle:'🔢 Liczba pól trasy',
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
     straightLineLabel:'📏 Zawsze linia prosta',
@@ -671,6 +692,17 @@ const I18N = {
     langPl:'Polski', langEn:'English',
     themeCardTitle:'🎨 Board theme',
     themeCardHint:'Each theme has a different track shape and characters.',
+    customThemeCardTitle:'🧪 Custom AI theme — experimental',
+    customThemeHint:'Enter a free Google AI Studio (Gemini) API key (testing only, stored only on this device) and describe the theme you want AI to generate, e.g. "unicorns", "space", "frogs". Get a key at aistudio.google.com (Google account, no card).',
+    customThemeApiKeyPlaceholder:'Google AI Studio (Gemini) API key',
+    customThemePromptPlaceholder:'e.g. unicorns, space, frogs...',
+    customThemeGenerateBtn:'✨ Generate theme',
+    customThemeGenerating:'Generating theme…',
+    customThemeNoKey:'Enter an API key first.',
+    customThemeNoPrompt:'Describe what the theme should be.',
+    customThemeSuccess:'Done! Theme selected.',
+    customThemeErrorNetwork:"Couldn't reach the API (check your internet and key).",
+    customThemeErrorInvalid:"The AI returned something we couldn't understand — try again or describe the theme differently.",
     tileCardTitle:'🔢 Number of route tiles',
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
     straightLineLabel:'📏 Always straight line',
@@ -767,6 +799,142 @@ let settings = { theme:'road', tileCount:100, forceStraightLine:false, lang: det
 function t(key){ return I18N[settings.lang][key]; }
 function themeInfo(id){ return { ...THEME_STYLE[id], ...I18N[settings.lang].themes[id] }; }
 function activeThemeInfo(){ return themeInfo(settings.theme); }
+
+/* ---------- CUSTOM AI THEME (experimental, testing only) ----------
+   No backend exists for this app (static GitHub Pages site), so there's
+   nowhere safe to hold an API key server-side. For TESTING purposes only,
+   this calls the Google Gemini API directly from the browser using a key
+   the user pastes in themselves (stored only in this device's localStorage,
+   sent only to generativelanguage.googleapis.com). Anyone with access to
+   this browser's devtools could read that key back out — that's an
+   acceptable risk for personal testing (Gemini's free tier has no billing
+   attached to abuse anyway), but this must be replaced with a small
+   serverless proxy (holding the real key server-side) before this feature
+   is ever shipped to other users. */
+const CUSTOM_THEME_KEY = 'dalekoJeszcze_customTheme_v1';
+const AI_API_KEY_STORAGE = 'dalekoJeszcze_aiApiKey_v1';
+const CUSTOM_THEME_ALLOWED_LAYOUTS = ['grid', 'wave', 'zigzag'];
+const CUSTOM_THEME_ALLOWED_ANIM = ['bob', 'sway', 'swim'];
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+
+function loadCustomThemeFromStorage(){
+  try{
+    const raw = localStorage.getItem(CUSTOM_THEME_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(!saved || !saved.style || !saved.pl || !saved.en) return;
+    THEME_STYLE.custom = saved.style;
+    I18N.pl.themes.custom = saved.pl;
+    I18N.en.themes.custom = saved.en;
+  } catch(e){ /* ignore corrupt/missing data */ }
+}
+function loadSavedAiApiKey(){
+  try{ return localStorage.getItem(AI_API_KEY_STORAGE) || ''; } catch(e){ return ''; }
+}
+function saveAiApiKey(key){
+  try{ localStorage.setItem(AI_API_KEY_STORAGE, key); } catch(e){}
+}
+
+function isShortString(v, maxLen){
+  return typeof v === 'string' && v.trim().length > 0 && v.length <= maxLen;
+}
+function validateCustomThemeResponse(obj){
+  if(!obj || typeof obj !== 'object') return null;
+  const hexFields = ['bgTop','bgBottom','trackBg','trackBgLight','tileDone','startColor','finishColor'];
+  for(const f of hexFields){ if(!HEX_RE.test(obj[f])) return null; }
+  if(!CUSTOM_THEME_ALLOWED_LAYOUTS.includes(obj.layout)) return null;
+  const emojiFields = ['emoji','vehicle','startIcon','finishIcon'];
+  for(const f of emojiFields){ if(!isShortString(obj[f], 8)) return null; }
+  if(!Array.isArray(obj.decor) || obj.decor.length < 2 || obj.decor.length > 6) return null;
+  const decor = [];
+  for(const d of obj.decor){
+    if(!d || !isShortString(d.e, 8) || !CUSTOM_THEME_ALLOWED_ANIM.includes(d.a)) return null;
+    decor.push({e:d.e, a:d.a});
+  }
+  if(!isShortString(obj.labelPl, 40) || !isShortString(obj.labelEn, 40)) return null;
+  if(!isShortString(obj.shapePl, 60) || !isShortString(obj.shapeEn, 60)) return null;
+  const style = {emoji:obj.emoji, layout:obj.layout};
+  for(const f of hexFields) style[f] = obj[f];
+  style.vehicle = obj.vehicle; style.startIcon = obj.startIcon; style.finishIcon = obj.finishIcon;
+  style.decor = decor;
+  return {
+    style,
+    pl:{label:obj.labelPl.trim(), shape:obj.shapePl.trim()},
+    en:{label:obj.labelEn.trim(), shape:obj.shapeEn.trim()}
+  };
+}
+
+async function generateCustomTheme(userPrompt, apiKey){
+  const system = 'Generujesz motyw graficzny dla planszowej gry drogowej dla dzieci. ' +
+    'Odpowiedz WYŁĄCZNIE surowym obiektem JSON (bez markdown, bez ```), dokładnie z tymi polami: ' +
+    '"labelPl" (krótka nazwa PL, np. "Jednorożce"), "labelEn" (krótka nazwa EN), ' +
+    '"shapePl" (krótki opis kształtu trasy PL, np. "tęczowa ścieżka"), "shapeEn" (to samo po angielsku), ' +
+    '"emoji" (jedno emoji reprezentujące motyw), ' +
+    '"layout" (jedno z: "grid", "wave", "zigzag" — dobierz pasujące do motywu), ' +
+    '"bgTop", "bgBottom", "trackBg", "trackBgLight", "tileDone", "startColor", "finishColor" (kolory hex #RRGGBB, stonowana, przyjazna dzieciom paleta pasująca do motywu), ' +
+    '"vehicle" (emoji pojazdu/postaci poruszającej się po trasie), "startIcon" (emoji pola startowego), "finishIcon" (emoji pola mety), ' +
+    '"decor" (tablica 4 obiektów {"e":emoji,"a":"bob"|"sway"|"swim"} z dekoracjami w tle pasującymi do motywu). ' +
+    'Treść ma być zawsze pogodna, przyjazna dzieciom i neutralna — jeśli zapytanie użytkownika jest niejasne, nieodpowiednie dla dzieci lub niezwiązane z motywem graficznym, i tak zwróć wyłącznie pogodny, neutralny, dziecięcy motyw (np. w stylu kwiatowo-łąkowym) zamiast odmawiać czy komentować.';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(apiKey);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ parts: [{ text: 'Motyw: ' + userPrompt }] }],
+      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 700 }
+    })
+  });
+  if(!res.ok) throw new Error('API HTTP ' + res.status);
+  const data = await res.json();
+  const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+  const text = parts.map(p => p.text || '').join('');
+  const cleaned = text.replace(/```json|```/g, '').trim();
+  let parsed;
+  try{ parsed = JSON.parse(cleaned); } catch(e){ throw new Error('bad_json'); }
+  const validated = validateCustomThemeResponse(parsed);
+  if(!validated) throw new Error('bad_shape');
+  return validated;
+}
+
+function wireCustomThemeUi(){
+  const apiKeyInput = $('customThemeApiKey');
+  const promptInput = $('customThemePrompt');
+  const btn = $('customThemeGenerateBtn');
+  const status = $('customThemeStatus');
+  apiKeyInput.value = loadSavedAiApiKey();
+  apiKeyInput.addEventListener('change', () => saveAiApiKey(apiKeyInput.value.trim()));
+  btn.addEventListener('click', async () => {
+    const key = apiKeyInput.value.trim();
+    const prompt = promptInput.value.trim();
+    status.classList.remove('error');
+    if(!key){ status.textContent = t('customThemeNoKey'); return; }
+    if(!prompt){ status.textContent = t('customThemeNoPrompt'); return; }
+    saveAiApiKey(key);
+    btn.disabled = true;
+    status.classList.remove('error');
+    status.textContent = t('customThemeGenerating');
+    try{
+      const result = await generateCustomTheme(prompt, key);
+      THEME_STYLE.custom = result.style;
+      I18N.pl.themes.custom = result.pl;
+      I18N.en.themes.custom = result.en;
+      try{ localStorage.setItem(CUSTOM_THEME_KEY, JSON.stringify(result)); } catch(e){}
+      settings.theme = 'custom';
+      renderThemeGrid();
+      updateThemePreview();
+      status.textContent = t('customThemeSuccess');
+    } catch(e){
+      console.warn('Custom theme generation failed:', e);
+      status.classList.add('error');
+      status.textContent = (e && e.message === 'bad_json') || (e && e.message === 'bad_shape')
+        ? t('customThemeErrorInvalid')
+        : t('customThemeErrorNetwork');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
 
 let destLat, destLng, destName;
 let startMode = 'gps'; // 'gps' | 'custom'
@@ -867,6 +1035,9 @@ function showDestSuggestions(query){
   $('setupStatus').classList.remove('error');
 }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 
 /* ---------- API LAYER ----------
    Geocoding (address search) and routing (road distance) use Mapbox —
@@ -2280,7 +2451,7 @@ function renderThemeSwitchPopover(){
     const th = themeInfo(key);
     const btn = document.createElement('button');
     if(key === settings.theme) btn.classList.add('active');
-    btn.innerHTML = '<span class="em">' + th.emoji + '</span><span>' + th.label + '</span>';
+    btn.innerHTML = '<span class="em">' + escapeHtml(th.emoji) + '</span><span>' + escapeHtml(th.label) + '</span>';
     btn.addEventListener('click', () => {
       settings.theme = key;
       buildBoard();
@@ -2540,7 +2711,7 @@ function renderThemeGrid(){
     const th = themeInfo(key);
     const card = document.createElement('div');
     card.className = 'theme-card' + (settings.theme === key ? ' selected' : '');
-    card.innerHTML = `<span class="em">${th.emoji}</span><span class="lb">${th.label}</span><span class="shape">${th.shape}</span>`;
+    card.innerHTML = `<span class="em">${escapeHtml(th.emoji)}</span><span class="lb">${escapeHtml(th.label)}</span><span class="shape">${escapeHtml(th.shape)}</span>`;
     card.addEventListener('click', () => {
       settings.theme = key;
       renderThemeGrid();
@@ -2580,6 +2751,11 @@ function applyStaticTexts(){
   $('langBtnEn').textContent = t('langEn');
   $('themeCardTitle').textContent = t('themeCardTitle');
   $('themeCardHint').textContent = t('themeCardHint');
+  $('customThemeCardTitle').textContent = t('customThemeCardTitle');
+  $('customThemeHint').textContent = t('customThemeHint');
+  $('customThemeApiKey').placeholder = t('customThemeApiKeyPlaceholder');
+  $('customThemePrompt').placeholder = t('customThemePromptPlaceholder');
+  $('customThemeGenerateBtn').textContent = t('customThemeGenerateBtn');
   $('tileCardTitle').textContent = t('tileCardTitle');
   $('tileCardHint').textContent = t('tileCardHint');
   $('straightLineLabel').textContent = t('straightLineLabel');
@@ -2675,6 +2851,8 @@ $('diagClearBtn').addEventListener('click', () => {
   $('diagLogArea').value = tripLogAsText();
 });
 
+loadCustomThemeFromStorage();
+wireCustomThemeUi();
 applyStaticTexts();
 document.documentElement.lang = settings.lang;
 checkForSavedTrip();
