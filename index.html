@@ -615,6 +615,7 @@ const I18N = {
     customThemeNoPrompt:'Opisz jaki motyw ma powstać.',
     customThemeSuccess:'Gotowe! Motyw wybrany.',
     customThemeErrorNetwork:'Nie udało się połączyć z API (sprawdź internet i klucz).',
+    customThemeErrorApiPrefix:'Błąd API:',
     customThemeErrorInvalid:'AI zwróciło coś, czego nie dało się zrozumieć — spróbuj ponownie lub inaczej opisz motyw.',
     tileCardTitle:'🔢 Liczba pól trasy',
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
@@ -702,6 +703,7 @@ const I18N = {
     customThemeNoPrompt:'Describe what the theme should be.',
     customThemeSuccess:'Done! Theme selected.',
     customThemeErrorNetwork:"Couldn't reach the API (check your internet and key).",
+    customThemeErrorApiPrefix:'API error:',
     customThemeErrorInvalid:"The AI returned something we couldn't understand — try again or describe the theme differently.",
     tileCardTitle:'🔢 Number of route tiles',
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
@@ -885,7 +887,13 @@ async function generateCustomTheme(userPrompt, apiKey){
       generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 700 }
     })
   });
-  if(!res.ok) throw new Error('API HTTP ' + res.status);
+  if(!res.ok){
+    let apiMessage = null;
+    try{ const errBody = await res.json(); apiMessage = errBody && errBody.error && errBody.error.message; } catch(e){}
+    const err = new Error('API HTTP ' + res.status);
+    err.apiMessage = apiMessage || ('HTTP ' + res.status);
+    throw err;
+  }
   const data = await res.json();
   const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
   const text = parts.map(p => p.text || '').join('');
@@ -927,9 +935,13 @@ function wireCustomThemeUi(){
     } catch(e){
       console.warn('Custom theme generation failed:', e);
       status.classList.add('error');
-      status.textContent = (e && e.message === 'bad_json') || (e && e.message === 'bad_shape')
-        ? t('customThemeErrorInvalid')
-        : t('customThemeErrorNetwork');
+      if(e && (e.message === 'bad_json' || e.message === 'bad_shape')){
+        status.textContent = t('customThemeErrorInvalid');
+      } else if(e && e.apiMessage){
+        status.textContent = t('customThemeErrorApiPrefix') + ' ' + e.apiMessage;
+      } else {
+        status.textContent = t('customThemeErrorNetwork');
+      }
     } finally {
       btn.disabled = false;
     }
