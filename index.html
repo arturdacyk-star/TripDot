@@ -1804,6 +1804,7 @@ const ROUTE_REFRESH_FLOOR_MS = 8000;
 const ROUTE_REFRESH_STALE_MS = 20000;
 const ROUTE_REFRESH_DISTANCE_KM = 0.1;
 function maybeRefreshRoute(lat, lng, now){
+  if(settings.forceStraightLine) return; // user explicitly wants straight-line distance; don't silently switch back to a real route
   if(routeRecalc.pending) return;
   const sinceLast = now - routeRecalc.lastFetchAt;
   if(sinceLast < ROUTE_REFRESH_FLOOR_MS) return;
