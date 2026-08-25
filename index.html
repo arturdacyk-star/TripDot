@@ -887,7 +887,7 @@ async function generateCustomTheme(userPrompt, apiKey){
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ parts: [{ text: 'Motyw: ' + userPrompt }] }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } }
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: 'low' } }
       })
     });
   } catch(e){
