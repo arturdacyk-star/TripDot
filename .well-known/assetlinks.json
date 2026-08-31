@@ -3,7 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "io.github.arturdacyk_star.twa",
-        "sha256_cert_fingerprints": ["E8:CC:FE:E3:85:FF:4E:71:F3:74:37:53:77:8D:1B:2B:67:9F:99:23:13:32:5B:62:FF:8B:04:AA:DF:94:CA:B1"]
+        "sha256_cert_fingerprints": ["37:60:AE:AB:74:C1:52:4C:1C:35:9D:9C:F1:83:B2:11:E2:91:7E:FE:19:02:39:99:4E:67:2F:C1:78:F3:63:43"]
       }
     }]
-
