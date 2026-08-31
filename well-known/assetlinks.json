@@ -1,1 +1,8 @@
-
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.arturdacyk_star.twa",
+        "sha256_cert_fingerprints": ["E8:CC:FE:E3:85:FF:4E:71:F3:74:37:53:77:8D:1B:2B:67:9F:99:23:13:32:5B:62:FF:8B:04:AA:DF:94:CA:B1"]
+      }
+    }]
