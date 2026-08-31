@@ -7,11 +7,17 @@
    tiles: those are live data and should always try the network first;
    the browser's normal HTTP cache already helps with repeat tile requests.
 */
-const CACHE_NAME = 'daleko-jeszcze-v1';
+const CACHE_NAME = 'daleko-jeszcze-v2';
 
 const APP_SHELL = [
   './',
   './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-192-maskable.png',
+  './icon-512-maskable.png',
+  './favicon-32.png',
   'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
