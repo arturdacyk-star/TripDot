@@ -889,11 +889,15 @@ async function generateCustomTheme(userPrompt, apiKey){
     '"labelPl" (krótka nazwa PL, np. "Jednorożce"), "labelEn" (krótka nazwa EN), ' +
     '"shapePl" (krótki opis kształtu trasy PL, np. "tęczowa ścieżka"), "shapeEn" (to samo po angielsku), ' +
     '"emoji" (jedno emoji reprezentujące motyw), ' +
-    '"layout" (jedno z: "grid", "wave", "zigzag" — dobierz pasujące do motywu), ' +
+    '"layout" — dobierz TEN, który najlepiej pasuje do motywu, spośród: ' +
+    '"grid" (siatka kwadratowych pól ułożonych wężykiem, jak klasyczna plansza — WYBIERZ TO, gdy motyw wyraźnie dotyczy pojazdów, dróg, autostrad, motocykli, miasta, budynków lub przedmiotów, np. "autostrada", "motor", "miasto", "pociąg"), ' +
+    '"wave" (kropki połączone jedną, płynnie meandrującą linią — WYBIERZ TO, gdy motyw wyraźnie dotyczy czegoś płynnego/organicznego: woda, chmury, tęcza, węże, robaki, zwierzęta pływające, przyroda, kosmos), ' +
+    '"zigzag" (naprzemienny, "skaczący" tor jak ślady stóp/łap — domyślny wybór dla wszystkiego pozostałego, zwłaszcza zwierząt, stworzeń, tropów i motywów fantazyjnych). ' +
+    'Wybierz "grid" albo "wave" TYLKO gdy motyw jednoznacznie pasuje do ich opisu powyżej — w każdym innym, mniej oczywistym przypadku wybierz "zigzag". ' +
     '"bgTop", "bgBottom", "trackBg", "trackBgLight", "tileDone", "startColor", "finishColor" (kolory hex #RRGGBB, stonowana, przyjazna dzieciom paleta pasująca do motywu), ' +
     '"vehicle" (emoji pojazdu/postaci poruszającej się po trasie), "startIcon" (emoji pola startowego), "finishIcon" (emoji pola mety), ' +
     '"decor" (tablica 4 obiektów {"e":emoji,"a":"bob"|"sway"|"swim"} z dekoracjami w tle pasującymi do motywu). ' +
-    'Treść ma być zawsze pogodna, przyjazna dzieciom i neutralna — jeśli zapytanie użytkownika jest niejasne, nieodpowiednie dla dzieci lub niezwiązane z motywem graficznym, i tak zwróć wyłącznie pogodny, neutralny, dziecięcy motyw (np. w stylu kwiatowo-łąkowym) zamiast odmawiać czy komentować.';
+    'Treść ma być zawsze pogodna, przyjazna dzieciom i neutralna — jeśli zapytanie użytkownika jest niejasne, i tak zwróć wyłącznie pogodny, neutralny, dziecięcy motyw (np. w stylu kwiatowo-łąkowym) zamiast odmawiać czy komentować.';
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + encodeURIComponent(apiKey);
   let res;
   try{
