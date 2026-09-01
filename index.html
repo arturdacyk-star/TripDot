@@ -110,6 +110,7 @@
     font-size:16px; font-family:'Nunito'; font-weight:700; color:var(--ink);
     background:#F7F9FC;
   }
+  .masked-input{ -webkit-text-security:disc; text-security:disc; }
   input:focus{outline:none; border-color:var(--sun);}
 
   .primary-btn{
@@ -496,7 +497,7 @@
   <div class="card">
     <h2 id="customThemeCardTitle">🧪 Motyw Custom (AI) — eksperymentalne</h2>
     <p class="hint" id="customThemeHint">Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).</p>
-    <input type="password" id="customThemeApiKey" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off">
+    <input type="text" id="customThemeApiKey" class="masked-input" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <input type="text" id="customThemePrompt" placeholder="np. jednorożce, kosmos, żaby..." style="margin-top:8px;">
     <button class="secondary-btn" id="customThemeGenerateBtn" style="margin-top:8px;">✨ Generuj motyw</button>
     <p class="hint" id="customThemeStatus" style="min-height:16px;"></p>
