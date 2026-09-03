@@ -895,7 +895,11 @@ async function generateCustomTheme(userPrompt, apiKey){
     '"wave" (kropki połączone jedną, płynnie meandrującą linią — WYBIERZ TO, gdy motyw wyraźnie dotyczy czegoś płynnego/organicznego: woda, chmury, tęcza, węże, robaki, zwierzęta pływające, przyroda, kosmos), ' +
     '"zigzag" (naprzemienny, "skaczący" tor jak ślady stóp/łap — domyślny wybór dla wszystkiego pozostałego, zwłaszcza zwierząt, stworzeń, tropów i motywów fantazyjnych). ' +
     'Wybierz "grid" albo "wave" TYLKO gdy motyw jednoznacznie pasuje do ich opisu powyżej — w każdym innym, mniej oczywistym przypadku wybierz "zigzag". ' +
-    '"bgTop", "bgBottom", "trackBg", "trackBgLight", "tileDone", "startColor", "finishColor" (kolory hex #RRGGBB, stonowana, przyjazna dzieciom paleta pasująca do motywu), ' +
+    '"bgTop"/"bgBottom" (kolory hex #RRGGBB, gradient tła CAŁEGO EKRANU za planszą, góra/dół), ' +
+    '"trackBg" (kolor hex, tło PANELU planszy — ciemniejsze pole pod samymi kafelkami/kropkami trasy), ' +
+    '"trackBgLight" (kolor hex, ścieżka/kafelki JESZCZE NIEPRZEJECHANE), ' +
+    '"tileDone" (kolor hex, ścieżka/kafelki JUŻ PRZEJECHANE — jeśli użytkownik prosi o kontrast między przejechaną a nieprzejechaną trasą, różnicuj właśnie te dwa pola: "trackBgLight" i "tileDone"), ' +
+    '"startColor" (kolor hex pola/znacznika startowego), "finishColor" (kolor hex pola/znacznika mety) — wszystkie kolory w stonowanej, przyjaznej dzieciom palecie pasującej do motywu, ' +
     '"vehicle" (emoji pojazdu/postaci poruszającej się po trasie), "startIcon" (emoji pola startowego), "finishIcon" (emoji pola mety), ' +
     '"decor" (tablica 4 obiektów {"e":emoji,"a":"bob"|"sway"|"swim"} z dekoracjami w tle pasującymi do motywu). ' +
     'Treść ma być zawsze pogodna, przyjazna dzieciom i neutralna — jeśli zapytanie użytkownika jest niejasne, i tak zwróć wyłącznie pogodny, neutralny, dziecięcy motyw (np. w stylu kwiatowo-łąkowym) zamiast odmawiać czy komentować.';
@@ -1334,6 +1338,8 @@ function applyThemeVars(theme){
   root.setProperty('--grass', theme.tileDone);
   root.setProperty('--sun', theme.startColor);
   root.setProperty('--finish', theme.finishColor);
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeColorMeta) themeColorMeta.setAttribute('content', theme.bgTop);
 }
 
 function buildGridTiles(wrap, theme, count){
@@ -1391,7 +1397,9 @@ function buildGridTiles(wrap, theme, count){
   }
   wrap.style.gridTemplateRows = rowTemplate.join(' ');
 
-  const decoSize = Math.max(9, Math.min(18, Math.floor(140 / Math.sqrt(count))));
+  const decoSize = count >= 100
+    ? Math.max(9, Math.min(18, Math.floor(140 / Math.sqrt(count)))) * 2
+    : Math.max(9, Math.min(18, Math.floor(140 / Math.sqrt(count))));
   cells.forEach((cell, i) => {
     const seqNum = i + 1;
     const tl = document.createElement('div');
@@ -1539,7 +1547,9 @@ function buildPathTiles(wrap, theme, count){
   // don't collide with the tiles or the connecting line
   if(theme.decor && theme.decor.length){
     const decorCount = clamp(Math.round(count / 25) * 3, 9, 30);
-    const decorSize = Math.max(10, Math.min(20, Math.floor(size * 1.1)));
+    const decorSize = count >= 100
+      ? Math.max(10, Math.min(20, Math.floor(size * 1.1))) * 2
+      : Math.max(10, Math.min(20, Math.floor(size * 1.1)));
     const offset = size * 1.6 + 6;
     for(let k = 0; k < decorCount; k++){
       const idx = Math.min(count - 1, Math.floor((k + 0.5) * (count - 1) / decorCount));
@@ -1639,7 +1649,9 @@ function renderProgress(fraction){
   const filledTiles = arrived ? routeTiles : Math.min(routeTiles, Math.floor(fraction * routeTiles));
   const currentTile = arrived ? totalTiles : Math.min(routeTiles, filledTiles + 1);
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // reference: size at 100 tiles
-  const carSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
+  const carSize = count >= 100
+    ? Math.max(carMinSize, Math.floor(160 / Math.sqrt(count))) * 2
+    : Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
 
   for(let i = 1; i <= totalTiles; i++){
     const el = $('tile-' + i);
@@ -1665,10 +1677,18 @@ function renderProgress(fraction){
   // traveled path reads as one continuous colored route, not just dots
   const pathLine = document.getElementById('pathProgressLine');
   if(pathLine && pathLine.getTotalLength){
-    const len = pathLine.getTotalLength();
-    const revealFrac = arrived ? 1 : clamp(filledTiles / routeTiles, 0, 1);
-    pathLine.style.strokeDasharray = len;
-    pathLine.style.strokeDashoffset = len * (1 - revealFrac);
+    try{
+      const len = pathLine.getTotalLength();
+      const revealFrac = arrived ? 1 : clamp(filledTiles / routeTiles, 0, 1);
+      pathLine.style.strokeDasharray = len;
+      pathLine.style.strokeDashoffset = len * (1 - revealFrac);
+    } catch(e){
+      // getTotalLength() throws on some browsers when the board (and this
+      // SVG line inside it) is display:none — e.g. fullscreen map view,
+      // where road-wrap is hidden. Harmless to skip: the line isn't visible
+      // anyway, and this must not abort the rest of renderProgress below
+      // (percent/km readout, map marker) the way an uncaught exception would.
+    }
   }
 
   $('progressFill').style.width = (fraction*100) + '%';
