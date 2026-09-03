@@ -331,6 +331,12 @@
     width:38px; height:38px; border-radius:50%; border:none;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
+  #routeMapFollowBtn{
+    position:absolute; right:10px; bottom:56px; z-index:500;
+    width:38px; height:38px; border-radius:50%; border:none;
+    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
+  }
+  #routeMapFollowBtn.active{background:var(--coral); color:#fff;}
   .route-map-car-icon{font-size:44px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
   .tile{
@@ -577,6 +583,7 @@
     <div class="road-wrap" id="roadWrap"></div>
     <div class="route-map-wrap hidden" id="routeMapWrap">
       <div id="routeMapCanvas"></div>
+      <button id="routeMapFollowBtn" title="Prowadź mnie">🧭</button>
       <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⤢</button>
     </div>
 
@@ -2573,7 +2580,9 @@ $('themeSwitchBtn').addEventListener('click', () => {
    Tapping the button cycles: board only -> map only -> both split -> board only ---- */
 let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapCarMarker = null,
     routeMapStartMarker = null, routeMapDestMarker = null,
-    boardViewMode = 'board'; // 'board' | 'map' | 'split'
+    boardViewMode = 'board', // 'board' | 'map' | 'split'
+    mapFollowActive = false;
+const MAP_FOLLOW_ZOOM = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving)
 
 function ensureRouteMap(){
   if(routeMap) return;
@@ -2685,6 +2694,9 @@ function updateRouteMapCarPosition(){
       routeMapCarMarker._vehicleEmoji = theme.vehicle;
     }
   }
+  if(mapFollowActive){
+    routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
+  }
 }
 
 function applyBoardViewMode(){
@@ -2704,6 +2716,9 @@ function applyBoardViewMode(){
 
 function resetRouteMapView(){
   boardViewMode = 'board';
+  mapFollowActive = false;
+  const followBtn = $('routeMapFollowBtn');
+  if(followBtn) followBtn.classList.remove('active');
   applyBoardViewMode();
   if(routeMapLineDone && routeMap){ routeMap.removeLayer(routeMapLineDone); routeMapLineDone = null; }
   if(routeMapLineTodo && routeMap){ routeMap.removeLayer(routeMapLineTodo); routeMapLineTodo = null; }
@@ -2737,8 +2752,19 @@ $('tileCountToggleBtn').addEventListener('click', () => {
   saveTripState();
 });
 
+$('routeMapFollowBtn').addEventListener('click', () => {
+  mapFollowActive = !mapFollowActive;
+  $('routeMapFollowBtn').classList.toggle('active', mapFollowActive);
+  if(mapFollowActive && routeMap){
+    const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
+    if(pos) routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
+  }
+});
+
 $('routeMapFitBtn').addEventListener('click', () => {
   if(!routeMap || !routeMapLineDone || !routeMapLineTodo) return;
+  mapFollowActive = false;
+  $('routeMapFollowBtn').classList.remove('active');
   const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
   routeMap.fitBounds(bounds, { padding:[24,24] });
 });
