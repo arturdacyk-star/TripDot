@@ -331,7 +331,7 @@
     width:38px; height:38px; border-radius:50%; border:none;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
-  .route-map-car-icon{font-size:22px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .route-map-car-icon{font-size:44px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
   .tile{
     position:relative; border-radius:5px;
@@ -1628,12 +1628,15 @@ function renderProgress(fraction){
   // to rebuild the board against the new, smaller size before placing any
   // tiles, or the bottom rows end up positioned below the visible area
   const arrivalEl = $('arrivalBanner');
+  const progressMsgRow = document.querySelector('.progress-msg-row');
   const bannerWasShown = arrivalEl.classList.contains('show');
   if(displayPercent >= 100){
     $('arrivalBannerText').textContent = t('msgDone') + (destName ? ' ' + t('msgDoneTo') + ' ' + destName : '') + '!';
     arrivalEl.classList.add('show');
+    if(progressMsgRow) progressMsgRow.style.display = 'none';
   } else {
     arrivalEl.classList.remove('show');
+    if(progressMsgRow) progressMsgRow.style.display = '';
   }
   if(arrivalEl.classList.contains('show') !== bannerWasShown){
     buildBoard();
@@ -1724,14 +1727,14 @@ function spawnConfetti(){
   const overlay = $('confettiOverlay');
   overlay.innerHTML = '';
   const colors = ['#FF6B5B','#FFC93C','#6FCF97','#39B6E0','#9B59B6','#FF9F1C'];
-  const n = 60;
+  const n = 150;
   for(let i = 0; i < n; i++){
     const p = document.createElement('span');
     p.className = 'confetti-piece';
     p.style.left = (Math.random()*100) + 'vw';
     p.style.background = colors[i % colors.length];
-    p.style.animationDuration = (2 + Math.random()*1.5) + 's';
-    p.style.animationDelay = (Math.random()*0.6) + 's';
+    p.style.animationDuration = (6 + Math.random()*4.5) + 's';
+    p.style.animationDelay = (Math.random()*1.8) + 's';
     overlay.appendChild(p);
   }
   overlay.classList.remove('hidden');
@@ -1744,7 +1747,7 @@ function dismissConfetti(){
 function triggerArrivalCelebration(){
   spawnConfetti();
   clearTimeout(window._confettiAutoTimer);
-  window._confettiAutoTimer = setTimeout(dismissConfetti, 6000);
+  window._confettiAutoTimer = setTimeout(dismissConfetti, 18000);
 }
 $('confettiOverlay').addEventListener('click', dismissConfetti);
 
@@ -2187,12 +2190,23 @@ async function geocodeMapbox(query){
     fullName: f.place_name
   }));
 }
+function nominatimShortName(address, displayName){
+  const a = address || {};
+  const street = a.road || a.pedestrian || a.footway || a.cycleway || '';
+  const house = a.house_number || '';
+  const city = a.city || a.town || a.village || a.municipality || a.county || '';
+  const streetPart = [street, house].filter(Boolean).join(' ');
+  if(streetPart && city) return streetPart + ', ' + city;
+  if(streetPart) return streetPart;
+  if(city) return city;
+  return (displayName || '').split(',')[0];
+}
 async function geocodeNominatim(query){
-  const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&accept-language=' + settings.lang + '&q=' + encodeURIComponent(query);
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&accept-language=' + settings.lang + '&q=' + encodeURIComponent(query);
   const res = await fetchWithTimeout(url, ROUTE_FETCH_TIMEOUT_MS, {headers: {'Accept': 'application/json'}});
   if(!res.ok) throw new Error('Nominatim HTTP ' + res.status);
   const data = await res.json();
-  return data.map(r => ({ lat: r.lat, lon: r.lon, shortName: r.display_name.split(',')[0], fullName: r.display_name }));
+  return data.map(r => ({ lat: r.lat, lon: r.lon, shortName: nominatimShortName(r.address, r.display_name), fullName: r.display_name }));
 }
 async function geocodePhoton(query){
   const url = 'https://photon.komoot.io/api/?limit=5&lang=' + settings.lang + '&q=' + encodeURIComponent(query);
@@ -2309,7 +2323,7 @@ $('destAddress').addEventListener('input', () => {
 
 /* ---- pick destination by tapping a map (free OpenStreetMap/Leaflet,
    no API key — fallback for addresses the geocoder can't find) ---- */
-let pickerMap = null, pickerMarker = null, pickerLatLng = null, myLocationMarker = null;
+let pickerMap = null, pickerMarker = null, pickerLatLng = null, myLocationMarker = null, pickerAddressDetails = null;
 function locateMeOnPicker(zoom){
   if(!navigator.geolocation || !pickerMap) return;
   const btn = $('mapPickerLocate');
@@ -2347,13 +2361,15 @@ function ensurePickerMap(){
     $('mapPickerConfirm').disabled = false;
     $('mapPickerName').textContent = t('searching');
     try{
-      const url = 'https://nominatim.openstreetmap.org/reverse?format=json&accept-language=' + settings.lang
+      const url = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&accept-language=' + settings.lang
         + '&lat=' + e.latlng.lat + '&lon=' + e.latlng.lng;
       const res = await fetch(url, {headers:{'Accept':'application/json'}});
       const data = await res.json();
       $('mapPickerName').textContent = data.display_name || (e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5));
+      pickerAddressDetails = data.address || null;
     } catch(err){
       $('mapPickerName').textContent = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+      pickerAddressDetails = null;
     }
   });
 }
@@ -2371,7 +2387,7 @@ $('mapPickerConfirm').addEventListener('click', () => {
   const nameText = $('mapPickerName').textContent || (pickerLatLng.lat.toFixed(5) + ', ' + pickerLatLng.lng.toFixed(5));
   selectDestination({
     lat: pickerLatLng.lat, lon: pickerLatLng.lng,
-    shortName: nameText.split(',')[0], fullName: nameText
+    shortName: nominatimShortName(pickerAddressDetails, nameText), fullName: nameText
   });
   $('mapPickerOverlay').classList.add('hidden');
 });
@@ -2656,7 +2672,7 @@ function updateRouteMapCarPosition(){
   if(!pos) return;
   const theme = activeThemeInfo();
   if(!routeMapCarMarker){
-    const icon = L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] });
+    const icon = L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[52,52], iconAnchor:[26,26] });
     routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
     routeMapCarMarker._vehicleEmoji = theme.vehicle;
   } else {
@@ -2665,7 +2681,7 @@ function updateRouteMapCarPosition(){
     // with — switching themes (e.g. car → boat) never updated it until
     // the marker got recreated (new trip, or toggling map view off/on)
     if(routeMapCarMarker._vehicleEmoji !== theme.vehicle){
-      routeMapCarMarker.setIcon(L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[26,26], iconAnchor:[13,13] }));
+      routeMapCarMarker.setIcon(L.divIcon({ className:'route-map-car-marker', html:'<span class="route-map-car-icon">' + theme.vehicle + '</span>', iconSize:[52,52], iconAnchor:[26,26] }));
       routeMapCarMarker._vehicleEmoji = theme.vehicle;
     }
   }
