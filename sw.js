@@ -7,7 +7,7 @@
    tiles: those are live data and should always try the network first;
    the browser's normal HTTP cache already helps with repeat tile requests.
 */
-const CACHE_NAME = 'tripdot_v4';
+const CACHE_NAME = 'tripdot_v5';
 
 const APP_SHELL = [
   './',
