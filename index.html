@@ -285,7 +285,7 @@
   #mapViewBtn.active{background:var(--coral); color:#fff;}
   .top-bar-btns{display:flex; gap:8px; align-self:center;}
   .theme-switch-popover{
-    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:900;
+    position:absolute; top:64px; left:50%; transform:translateX(-50%); z-index:5000;
     background:#fff; border-radius:16px; padding:10px; box-shadow:0 10px 24px rgba(36,48,61,.25);
     display:flex; gap:8px;
   }
@@ -2606,6 +2606,7 @@ function renderRouteMap(fitBounds){
   const curLatLng = [currentPos.lat, currentPos.lng];
 
   let donePoints, todoPoints;
+  const hasProgress = maxProgress > 0 || completedRoutePoints.length > 0;
   if(usingRoute && routePoints && routePoints.length > 1){
     // split the route geometry at the segment we last matched to, so the
     // covered part can be drawn in a different colour from what's left.
@@ -2613,11 +2614,14 @@ function renderRouteMap(fitBounds){
     // earlier (since-replaced) route from previous recalculations, so the
     // green portion reflects the whole trip so far, not just this segment.
     const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
-    donePoints = completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng]);
+    donePoints = hasProgress
+      ? completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng])
+      : [routePoints[0], routePoints[0]]; // no real progress yet — don't draw a stray segment out to the raw (noisy) GPS fix
     todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
   } else {
     const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
-    donePoints = completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng];
+    donePoints = !hasProgress ? [startPt, startPt]
+      : (completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng]);
     todoPoints = [curLatLng, [destLat, destLng]];
   }
 
@@ -2658,13 +2662,17 @@ function updateRouteMapLineSplit(){
   if(!currentPos) return;
   const curLatLng = [currentPos.lat, currentPos.lng];
   let donePoints, todoPoints;
+  const hasProgress = maxProgress > 0 || completedRoutePoints.length > 0;
   if(usingRoute && routePoints && routePoints.length > 1){
     const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
-    donePoints = completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng]);
+    donePoints = hasProgress
+      ? completedRoutePoints.concat(routePoints.slice(0, idx + 1)).concat([curLatLng])
+      : [routePoints[0], routePoints[0]];
     todoPoints = [curLatLng].concat(routePoints.slice(idx + 1));
   } else {
     const startPt = routeStart ? [routeStart.lat, routeStart.lng] : curLatLng;
-    donePoints = completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng];
+    donePoints = !hasProgress ? [startPt, startPt]
+      : (completedRoutePoints.length ? completedRoutePoints.concat([curLatLng]) : [startPt, curLatLng]);
     todoPoints = [curLatLng, [destLat, destLng]];
   }
   routeMapLineDone.setLatLngs(donePoints);
