@@ -304,7 +304,7 @@
   .progress-bar-track{width:100%; height:10px; background:#E4E9F0; border-radius:10px; overflow:hidden;}
   .progress-bar-fill{height:100%; width:0%; background:linear-gradient(90deg, var(--grass), #57C77E); border-radius:10px; transition:width .6s ease;}
   .progress-msg-row{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:6px;}
-  .progress-msg{font-family:'Baloo 2'; font-weight:600; font-size:13px; color:var(--asphalt);}
+  .progress-msg{font-family:'Baloo 2'; font-weight:600; font-size:13px; color:var(--ink);}
   .arrival-banner{
     display:none; align-items:center; justify-content:center; gap:10px;
     margin-top:8px; padding:10px 14px; border-radius:14px;
@@ -326,13 +326,11 @@
     box-shadow:0 10px 30px rgba(36,48,61,.25); position:relative;
   }
   #routeMapCanvas{width:100%; height:100%;}
-  #routeMapFitBtn{
-    position:absolute; right:10px; bottom:10px; z-index:500;
-    width:38px; height:38px; border-radius:50%; border:none;
-    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
+  .route-map-btn-stack{
+    position:absolute; right:10px; top:50%; transform:translateY(-50%); z-index:500;
+    display:flex; flex-direction:column; gap:8px;
   }
-  #routeMapFollowBtn{
-    position:absolute; right:10px; bottom:56px; z-index:500;
+  #routeMapFitBtn, #routeMapFollowBtn{
     width:38px; height:38px; border-radius:50%; border:none;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
@@ -583,8 +581,10 @@
     <div class="road-wrap" id="roadWrap"></div>
     <div class="route-map-wrap hidden" id="routeMapWrap">
       <div id="routeMapCanvas"></div>
-      <button id="routeMapFollowBtn" title="Prowadź mnie">🧭</button>
-      <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⤢</button>
+      <div class="route-map-btn-stack">
+        <button id="routeMapFollowBtn" title="Prowadź mnie">🧭</button>
+        <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⛶</button>
+      </div>
     </div>
 
     <div class="bottom-actions">
