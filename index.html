@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
+<script>
+// ============================================================
+// SINGLE SOURCE OF TRUTH for the app version — bump these two,
+// together with CACHE_NAME in sw.js, whenever releasing a change.
+const APP_VERSION = '1.1.0';
+const APP_BUILD_DATE = '2026-09-06'; // ISO format
+// ============================================================
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>TripDot – Are we there yet? / Daleko jeszcze?</title>
@@ -103,6 +111,9 @@
   }
   .card h2{font-size:17px; margin-bottom:4px;}
   .card p.hint{font-size:13px; color:#6b7688; margin:4px 0 14px 0; line-height:1.5;}
+  .about-line{font-size:14px; margin:6px 0; color:var(--ink);}
+  .about-line a{color:var(--coral); font-weight:700; text-decoration:underline;}
+  .about-credits{font-size:11px; margin-top:12px;}
   label{display:block; font-size:12px; font-weight:700; color:#6b7688; text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; margin-top:12px;}
   label:first-of-type{margin-top:0;}
   input[type=text], input[type=number], input[type=password]{
@@ -541,6 +552,15 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2 id="aboutCardTitle">ℹ️ O appce</h2>
+    <p class="hint" id="aboutBlurb">TripDot to hobbystyczny projekt rodzinny, stworzony z pomocą AI, zaprojektowany i rozwijany przeze mnie.</p>
+    <p class="about-line" id="aboutVersion">Wersja 1.1.0 (6 września 2026)</p>
+    <p class="about-line"><a href="./privacy.html" target="_blank" id="aboutPrivacyLink">Polityka prywatności</a></p>
+    <p class="about-line"><a href="mailto:tripdotmap@gmail.com" id="aboutContactLink">tripdotmap@gmail.com</a></p>
+    <p class="hint about-credits" id="aboutCredits">Mapy i trasy: © OpenStreetMap, Nominatim, Mapbox, OSRM. Generowanie motywów: Google Gemini.</p>
+  </div>
+
   <button class="primary-btn" id="optionsDoneBtn">Gotowe</button>
 </div>
 
@@ -647,6 +667,11 @@ const I18N = {
     straightLineLabel:'📏 Zawsze linia prosta',
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa. Przyda się też do śledzenia lotu samolotem.',
     diagCardTitle:'🛠️ Diagnostyka',
+    aboutCardTitle:'ℹ️ O appce',
+    aboutBlurb:'TripDot powstał z pomysłu, żeby uprzyjemnić rodzinne podróże samochodem — rozwijam go po godzinach, dla własnej rodziny.',
+    aboutVersionLabel:'Wersja',
+    aboutPrivacyLink:'Polityka prywatności',
+    aboutCredits:'Mapy i trasy: © OpenStreetMap, Nominatim, Mapbox, OSRM. Generowanie motywów: Google Gemini.',
     diagShowBtn:'Pokaż log',
     diagCopyBtn:'Kopiuj',
     diagClearBtn:'Wyczyść',
@@ -735,6 +760,11 @@ const I18N = {
     straightLineLabel:'📏 Always straight line',
     straightLineSub:"Don't calculate the real road route, even when the internet works. Also handy for tracking a flight.",
     diagCardTitle:'🛠️ Diagnostics',
+    aboutCardTitle:'ℹ️ About',
+    aboutBlurb:'TripDot started as an idea to make family car trips more fun — I\'m developing it in my spare time, for my own family.',
+    aboutVersionLabel:'Version',
+    aboutPrivacyLink:'Privacy policy',
+    aboutCredits:'Maps and routing: © OpenStreetMap, Nominatim, Mapbox, OSRM. Theme generation: Google Gemini.',
     diagShowBtn:'Show log',
     diagCopyBtn:'Copy',
     diagClearBtn:'Clear',
@@ -1951,8 +1981,9 @@ function acceptProgressFromGps(pos){
   gpsState.lastRawPosition = {lat, lng};
   gpsState.lastRawTimestamp = now;
   let fraction, matchedIndex = 0;
+  const isRouteTracking = !!(usingRoute && match);
 
-  if(usingRoute && match){
+  if(isRouteTracking){
     // blend: progressBase is locked in from any earlier recalculation and
     // never goes down; the remaining (1-progressBase) share fills in from
     // progress along the current (possibly recalculated) route segment
@@ -2009,24 +2040,26 @@ function acceptProgressFromGps(pos){
   const jump = fraction - gpsState.lastAcceptedProgress;
   const elapsed = Math.max(0.5, (now - gpsState.lastTimestamp) / 1000);
   // how big a jump in *trip fraction* is plausible given how much time has
-  // passed: a generous max speed (~1000 km/h — covers any road vehicle plus
-  // GPS slop, and also a flight, since straight-line mode can be used to
-  // track one) times elapsed seconds, expressed as a share of the whole
-  // trip. This scales UP with elapsed time — the longer the gap (e.g. the
+  // passed: a generous max speed times elapsed seconds, expressed as a
+  // share of the whole trip. Route-tracking mode only ever means a road
+  // vehicle, so it keeps a tighter ~200 km/h ceiling (still generous, but
+  // tight enough to catch real GPS glitches); straight-line mode can also
+  // be used to track a flight, so it gets a much higher ~1000 km/h ceiling.
+  // This scales UP with elapsed time — the longer the gap (e.g. the
   // app was backgrounded/minimized for a while), the more distance is
   // plausible, so the allowance must grow, not shrink. It previously
   // divided by elapsed instead, which meant a long background pause
   // produced a near-zero allowance and permanently rejected the correct
   // progress jump on resuming, leaving the board stuck at its old position
   // indefinitely.
-  const maxPlausibleSpeedKmPerSec = 0.28; // ~1000 km/h — generous enough to also cover tracking a flight in straight-line mode, not just road vehicles
+  const maxPlausibleSpeedKmPerSec = isRouteTracking ? 0.056 : 0.28;
   const maxReasonableJump = Math.max(0.025, Math.min(1, (maxPlausibleSpeedKmPerSec * elapsed) / Math.max(0.1, totalDistance)));
 
   if(jump > maxReasonableJump && gpsState.lastAcceptedProgress < 0.95){
     if(gpsState.pendingJump && Math.abs(gpsState.pendingJump.fraction - fraction) < 0.04){
       gpsState.pendingJump = null; // confirmed by a second, similar reading — accept below
     } else {
-      logTripEvent('jump_rejected', {fraction: +fraction.toFixed(4), lastAccepted: +gpsState.lastAcceptedProgress.toFixed(4), elapsedSec: +elapsed.toFixed(1), maxReasonableJump: +maxReasonableJump.toFixed(4)});
+      logTripEvent('jump_rejected', {fraction: +fraction.toFixed(4), lastAccepted: +gpsState.lastAcceptedProgress.toFixed(4), elapsedSec: +elapsed.toFixed(1), maxReasonableJump: +maxReasonableJump.toFixed(4), isRouteTracking});
       gpsState.pendingJump = {fraction, index:matchedIndex, at:now};
       setBoardStatus(t('gpsWeak'), false);
       return;
@@ -2906,6 +2939,12 @@ function applyStaticTexts(){
   $('straightLineLabel').textContent = t('straightLineLabel');
   $('straightLineSub').textContent = t('straightLineSub');
   $('diagCardTitle').textContent = t('diagCardTitle');
+  $('aboutCardTitle').textContent = t('aboutCardTitle');
+  $('aboutBlurb').textContent = t('aboutBlurb');
+  $('aboutVersion').textContent = t('aboutVersionLabel') + ' ' + APP_VERSION + ' (' +
+    new Date(APP_BUILD_DATE).toLocaleDateString(settings.lang === 'pl' ? 'pl-PL' : 'en-US', {year:'numeric', month:'long', day:'numeric'}) + ')';
+  $('aboutPrivacyLink').textContent = t('aboutPrivacyLink');
+  $('aboutCredits').textContent = t('aboutCredits');
   $('diagShowBtn').textContent = t('diagShowBtn');
   $('diagCopyBtn').textContent = t('diagCopyBtn');
   $('diagClearBtn').textContent = t('diagClearBtn');
