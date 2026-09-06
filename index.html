@@ -520,7 +520,7 @@
     <div class="toggle-row">
       <div>
         <div class="lb" id="straightLineLabel">📏 Zawsze linia prosta</div>
-        <div class="sub" id="straightLineSub">Nie licz realnej trasy drogowej, nawet gdy internet działa.</div>
+        <div class="sub" id="straightLineSub">Nie licz realnej trasy drogowej, nawet gdy internet działa. Przyda się też do śledzenia lotu samolotem.</div>
       </div>
       <label class="switch">
         <input type="checkbox" id="forceStraightToggle">
@@ -645,7 +645,7 @@ const I18N = {
     tileCardTitle:'🔢 Liczba pól trasy',
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
     straightLineLabel:'📏 Zawsze linia prosta',
-    straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa.',
+    straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa. Przyda się też do śledzenia lotu samolotem.',
     diagCardTitle:'🛠️ Diagnostyka',
     diagShowBtn:'Pokaż log',
     diagCopyBtn:'Kopiuj',
@@ -673,6 +673,7 @@ const I18N = {
     errAlreadyThere:'Start i cel są zbyt blisko siebie.',
     errGps:'Nie można odczytać GPS:',
     errGpsCheck:'Sprawdź zgodę na lokalizację.',
+    errGpsRetrying:'Nadal szukam sygnału GPS…',
     errNoGeoSupport:'Ta przeglądarka nie obsługuje GPS.',
     searching:'Szukam…',
     gpsWaiting:'Czekam na stabilny sygnał GPS…',
@@ -732,7 +733,7 @@ const I18N = {
     tileCardTitle:'🔢 Number of route tiles',
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
     straightLineLabel:'📏 Always straight line',
-    straightLineSub:"Don't calculate the real road route, even when the internet works.",
+    straightLineSub:"Don't calculate the real road route, even when the internet works. Also handy for tracking a flight.",
     diagCardTitle:'🛠️ Diagnostics',
     diagShowBtn:'Show log',
     diagCopyBtn:'Copy',
@@ -760,6 +761,7 @@ const I18N = {
     errAlreadyThere:'Start and destination are too close together.',
     errGps:'Could not read GPS:',
     errGpsCheck:'Check your location permission.',
+    errGpsRetrying:'Still searching for a GPS signal…',
     errNoGeoSupport:"This browser doesn't support GPS.",
     searching:'Searching…',
     gpsWaiting:'Waiting for a stable GPS signal…',
@@ -2007,8 +2009,9 @@ function acceptProgressFromGps(pos){
   const jump = fraction - gpsState.lastAcceptedProgress;
   const elapsed = Math.max(0.5, (now - gpsState.lastTimestamp) / 1000);
   // how big a jump in *trip fraction* is plausible given how much time has
-  // passed: a generous max speed (~200 km/h, covers any road vehicle plus
-  // GPS slop) times elapsed seconds, expressed as a share of the whole
+  // passed: a generous max speed (~1000 km/h — covers any road vehicle plus
+  // GPS slop, and also a flight, since straight-line mode can be used to
+  // track one) times elapsed seconds, expressed as a share of the whole
   // trip. This scales UP with elapsed time — the longer the gap (e.g. the
   // app was backgrounded/minimized for a while), the more distance is
   // plausible, so the allowance must grow, not shrink. It previously
@@ -2016,13 +2019,14 @@ function acceptProgressFromGps(pos){
   // produced a near-zero allowance and permanently rejected the correct
   // progress jump on resuming, leaving the board stuck at its old position
   // indefinitely.
-  const maxPlausibleSpeedKmPerSec = 0.056;
+  const maxPlausibleSpeedKmPerSec = 0.28; // ~1000 km/h — generous enough to also cover tracking a flight in straight-line mode, not just road vehicles
   const maxReasonableJump = Math.max(0.025, Math.min(1, (maxPlausibleSpeedKmPerSec * elapsed) / Math.max(0.1, totalDistance)));
 
   if(jump > maxReasonableJump && gpsState.lastAcceptedProgress < 0.95){
     if(gpsState.pendingJump && Math.abs(gpsState.pendingJump.fraction - fraction) < 0.04){
       gpsState.pendingJump = null; // confirmed by a second, similar reading — accept below
     } else {
+      logTripEvent('jump_rejected', {fraction: +fraction.toFixed(4), lastAccepted: +gpsState.lastAcceptedProgress.toFixed(4), elapsedSec: +elapsed.toFixed(1), maxReasonableJump: +maxReasonableJump.toFixed(4)});
       gpsState.pendingJump = {fraction, index:matchedIndex, at:now};
       setBoardStatus(t('gpsWeak'), false);
       return;
@@ -2176,7 +2180,12 @@ async function recalcRouteFromCurrentPosition(lat, lng){
 function handlePosition(pos){ acceptProgressFromGps(pos); }
 
 function handlePositionError(err){
-  $('boardStatus').textContent = t('errGps') + ' ' + err.message;
+  let msg = t('errGps') + ' ' + err.message;
+  // watchPosition keeps retrying on its own after a timeout or a
+  // momentary "position unavailable" — make that clear so the person
+  // doesn't think the app gave up and try to restart the trip themselves
+  if(err.code === 2 || err.code === 3) msg += ' ' + t('errGpsRetrying');
+  $('boardStatus').textContent = msg;
   $('boardStatus').classList.add('error');
 }
 
