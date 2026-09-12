@@ -5,7 +5,7 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.1';
 const APP_BUILD_DATE = '2026-09-12'; // ISO format
 // ============================================================
 </script>
@@ -180,6 +180,7 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     background:#F7F9FC; border:2px solid #E4E9F0; border-radius:10px;
     width:32px; height:32px; font-size:14px; cursor:pointer;
   }
+  .map-picker-search{padding:10px 16px; border-bottom:1px solid #E4E9F0; position:relative; z-index:1100;}
   #mapPickerMap{flex:1; min-height:0;}
   #mapPickerLocate{
     position:absolute; right:16px; bottom:110px; z-index:1200;
@@ -622,6 +623,15 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     <span id="mapPickerTitle">Wskaż cel na mapie</span>
     <button id="mapPickerClose">✕</button>
   </div>
+  <div class="map-picker-search">
+    <div class="search-wrap">
+      <div class="search-row">
+        <input type="text" id="mapPickerSearchInput" placeholder="np. Zakopane, Krupówki 10" autocomplete="off">
+        <button class="search-btn" id="mapPickerSearchBtn">Szukaj</button>
+      </div>
+      <div class="results-list hidden" id="mapPickerResultsList"></div>
+    </div>
+  </div>
   <div id="mapPickerMap"></div>
   <button id="mapPickerLocate" title="Moja lokalizacja">🎯</button>
   <div class="map-picker-footer">
@@ -647,6 +657,7 @@ const I18N = {
     destAddressPlaceholder:'np. Zakopane, Krupówki 10',
     searchBtn:'Szukaj',
     startBtn:'Ustal start i jedziemy! 🚦',
+    startBtnReady:'Rozpocznij podróż! 🚦',
     setupFooterNote:'Aplikacja użyje wybranego punktu startowego i policzy trasę do celu.',
     optionsTitle:'Opcje',
     langCardTitle:'🌐 Język',
@@ -678,10 +689,12 @@ const I18N = {
     diagShowBtn:'Pokaż log',
     diagCopyBtn:'Kopiuj',
     diagClearBtn:'Wyczyść',
+    diagLogEmpty:'(brak zapisanych zdarzeń z ostatniej podróży)',
     optionsDoneBtn:'Gotowe',
     statPercentLbl:'trasy',
     statKmLbl:'km zostało',
     resetBtn:'🏁 Zakończ podróż',
+    confirmEndTrip:'Zakończyć tę podróż?',
     routeModeStraightTitle:'Dystans liczony w linii prostej',
     routeModeRouteTitle:'Dystans liczony po realnej trasie drogowej',
     msgStart:'Dopiero ruszyliśmy',
@@ -740,6 +753,7 @@ const I18N = {
     destAddressPlaceholder:'e.g. Central Park, New York',
     searchBtn:'Search',
     startBtn:"Set start and let's go! 🚦",
+    startBtnReady:'Start the trip! 🚦',
     setupFooterNote:'The app will use the chosen starting point and calculate the route to your destination.',
     optionsTitle:'Options',
     langCardTitle:'🌐 Language',
@@ -771,10 +785,12 @@ const I18N = {
     diagShowBtn:'Show log',
     diagCopyBtn:'Copy',
     diagClearBtn:'Clear',
+    diagLogEmpty:'(no events recorded from the last trip)',
     optionsDoneBtn:'Done',
     statPercentLbl:'of route',
     statKmLbl:'km left',
     resetBtn:'🏁 End trip',
+    confirmEndTrip:'End this trip?',
     routeModeStraightTitle:'Distance calculated as a straight line',
     routeModeRouteTitle:'Distance calculated along the real road route',
     msgStart:'Just getting started',
@@ -1037,6 +1053,13 @@ let destLat, destLng, destName;
 let startMode = 'gps'; // 'gps' | 'custom'
 let startCustomLat, startCustomLng, startCustomName;
 let startLat, startLng, totalDistance, originalTotalDistance;
+// actual on-screen tile size of the currently built board, in px — set by
+// buildGridTiles()/buildPathTiles() regardless of which layout algorithm is
+// active, so the car/character size (see renderProgress) can scale off the
+// *real* rendered tile instead of guessing independently from `count`. The
+// two used to drift apart at low tile counts, since grid tiles and
+// wave/zigzag tiles are sized by completely different formulas.
+let lastTileSize = null;
 let routePoints = null;
 // geometry of route already driven BEFORE each recalculation — accumulated
 // across recalcs (never discarded) so the map can keep showing the whole
@@ -1478,6 +1501,13 @@ function buildGridTiles(wrap, theme, count){
     }
   }
   boardTileCount = cells.length;
+  // measure the actually-rendered tile (grid track sizes aren't known until
+  // layout happens) so the car/character can be scaled to match it
+  const sampleTile = wrap.querySelector('.tile:not(.turn)');
+  if(sampleTile){
+    const r = sampleTile.getBoundingClientRect();
+    if(r.width > 0 && r.height > 0) lastTileSize = Math.min(r.width, r.height);
+  }
 }
 
 function buildPathTiles(wrap, theme, count){
@@ -1513,6 +1543,7 @@ function buildPathTiles(wrap, theme, count){
   // rows → larger cellH → larger absolute waveAmp)
   const worstGap = cellH - 2*waveAmp - 2*footstepAmp;
   const size = Math.max(6, Math.min(34, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.6))));
+  lastTileSize = size;
 
   const centers = [];
   for(let i = 0; i < count; i++){
@@ -1702,10 +1733,15 @@ function renderProgress(fraction){
   const arrived = displayPercent >= 100;
   const filledTiles = arrived ? routeTiles : Math.min(routeTiles, Math.floor(fraction * routeTiles));
   const currentTile = arrived ? totalTiles : Math.min(routeTiles, filledTiles + 1);
-  const carMinSize = Math.floor(160 / Math.sqrt(100)); // reference: size at 100 tiles
-  const carSize = count >= 100
+  // scale the car/character off the tile size actually rendered on screen
+  // (grid vs wave/zigzag layouts size their tiles very differently at the
+  // same tile count) rather than an independent count-only formula — the
+  // two used to grow at different rates and drift apart at low counts
+  const carMinSize = Math.floor(160 / Math.sqrt(100)); // fallback reference: size at 100 tiles
+  const fallbackCarSize = count >= 100
     ? Math.max(carMinSize, Math.floor(160 / Math.sqrt(count))) * 2
     : Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
+  const carSize = lastTileSize ? Math.round(lastTileSize * 1.35) : fallbackCarSize;
 
   for(let i = 1; i <= totalTiles; i++){
     const el = $('tile-' + i);
@@ -1862,7 +1898,7 @@ function resetTripLog(){
 }
 
 function tripLogAsText(){
-  if(!tripLog.length) return '(brak zapisanych zdarzeń z ostatniej podróży)';
+  if(!tripLog.length) return t('diagLogEmpty');
   return tripLog.map(e => JSON.stringify(e)).join('\n');
 }
 
@@ -2378,6 +2414,8 @@ $('destClearBtn').addEventListener('click', () => {
   destLat = destLng = destName = undefined;
   $('destChip').classList.add('hidden');
   $('startBtn').disabled = true;
+  $('setupStatus').textContent = '';
+  $('setupStatus').classList.remove('error');
 });
 $('searchBtn').addEventListener('click', async () => {
   const query = $('destAddress').value.trim();
@@ -2438,23 +2476,47 @@ function ensurePickerMap(){
   }).addTo(pickerMap);
   locateMeOnPicker(15);
   pickerMap.on('click', async (e) => {
-    pickerLatLng = e.latlng;
-    if(pickerMarker) pickerMarker.setLatLng(e.latlng);
-    else pickerMarker = L.marker(e.latlng).addTo(pickerMap);
-    $('mapPickerConfirm').disabled = false;
-    $('mapPickerName').textContent = t('searching');
-    try{
-      const url = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&accept-language=' + settings.lang
-        + '&lat=' + e.latlng.lat + '&lon=' + e.latlng.lng;
-      const res = await fetch(url, {headers:{'Accept':'application/json'}});
-      const data = await res.json();
-      $('mapPickerName').textContent = data.display_name || (e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5));
-      pickerAddressDetails = data.address || null;
-    } catch(err){
-      $('mapPickerName').textContent = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
-      pickerAddressDetails = null;
-    }
+    await setPickerLatLng(e.latlng, { reverseGeocode: true });
   });
+}
+// shared by both "tap the map" and "search an address" — places/updates the
+// picker marker, enables Confirm, and resolves a display name for it
+async function setPickerLatLng(latlng, opts){
+  opts = opts || {};
+  pickerLatLng = latlng;
+  if(pickerMarker) pickerMarker.setLatLng(latlng);
+  else pickerMarker = L.marker(latlng).addTo(pickerMap);
+  $('mapPickerConfirm').disabled = false;
+  if(opts.displayName){
+    $('mapPickerName').textContent = opts.displayName;
+    pickerAddressDetails = opts.addressDetails || null;
+    return;
+  }
+  if(!opts.reverseGeocode){
+    $('mapPickerName').textContent = latlng.lat.toFixed(5) + ', ' + latlng.lng.toFixed(5);
+    pickerAddressDetails = null;
+    return;
+  }
+  $('mapPickerName').textContent = t('searching');
+  try{
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&accept-language=' + settings.lang
+      + '&lat=' + latlng.lat + '&lon=' + latlng.lng;
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const data = await res.json();
+    $('mapPickerName').textContent = data.display_name || (latlng.lat.toFixed(5) + ', ' + latlng.lng.toFixed(5));
+    pickerAddressDetails = data.address || null;
+  } catch(err){
+    $('mapPickerName').textContent = latlng.lat.toFixed(5) + ', ' + latlng.lng.toFixed(5);
+    pickerAddressDetails = null;
+  }
+}
+async function selectPickerSearchResult(r){
+  $('mapPickerResultsList').classList.add('hidden');
+  $('mapPickerResultsList').innerHTML = '';
+  $('mapPickerSearchInput').value = '';
+  const latlng = L.latLng(parseFloat(r.lat), parseFloat(r.lon));
+  pickerMap.setView(latlng, 15);
+  await setPickerLatLng(latlng, { displayName: r.fullName, addressDetails: null });
 }
 $('mapPickBtn').addEventListener('click', () => {
   $('mapPickerOverlay').classList.remove('hidden');
@@ -2463,8 +2525,28 @@ $('mapPickBtn').addEventListener('click', () => {
 });
 $('mapPickerClose').addEventListener('click', () => {
   $('mapPickerOverlay').classList.add('hidden');
+  $('mapPickerSearchInput').value = '';
+  $('mapPickerResultsList').classList.add('hidden');
+  $('mapPickerResultsList').innerHTML = '';
 });
 $('mapPickerLocate').addEventListener('click', () => locateMeOnPicker(15));
+$('mapPickerSearchBtn').addEventListener('click', async () => {
+  const query = $('mapPickerSearchInput').value.trim();
+  const statusEl = $('mapPickerName');
+  if(!query){ statusEl.textContent = t('errFillDest'); return; }
+  $('mapPickerSearchBtn').disabled = true;
+  const prevName = statusEl.textContent;
+  statusEl.textContent = t('searching');
+  try{
+    const results = await geocodeAddress(query);
+    statusEl.textContent = prevName;
+    renderGenericResults($('mapPickerResultsList'), results, statusEl, selectPickerSearchResult);
+  } catch(e){
+    console.warn('Search error:', e);
+    statusEl.textContent = t('errSearchFail') + ' (' + e.message + '). ' + t('errCheckNet');
+  } finally { $('mapPickerSearchBtn').disabled = false; }
+});
+$('mapPickerSearchInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); $('mapPickerSearchBtn').click(); } });
 $('mapPickerConfirm').addEventListener('click', () => {
   if(!pickerLatLng) return;
   const nameText = $('mapPickerName').textContent || (pickerLatLng.lat.toFixed(5) + ', ' + pickerLatLng.lng.toFixed(5));
@@ -2476,6 +2558,13 @@ $('mapPickerConfirm').addEventListener('click', () => {
 });
 
 /* ---- start point (defaults to GPS, like Google Maps) ---- */
+// the big primary button reads "Set start and let's go!" only while no
+// starting point has been explicitly chosen yet — once the user picks one
+// (search or map), it switches to "Start the trip!" since that's the only
+// thing left for it to do
+function updateStartBtnLabel(){
+  $('startBtn').textContent = (startMode === 'custom') ? t('startBtnReady') : t('startBtn');
+}
 function selectStartPoint(r){
   startMode = 'custom';
   startCustomLat = parseFloat(r.lat);
@@ -2485,7 +2574,8 @@ function selectStartPoint(r){
   $('startResultsList').innerHTML = '';
   $('startAddress').value = '';
   $('startSearchArea').classList.add('hidden');
-  $('startCurrentText').textContent = '📍 ' + r.shortName;
+  $('startCurrentText').textContent = r.shortName;
+  updateStartBtnLabel();
 }
 $('startChangeBtn').addEventListener('click', () => {
   $('startSearchArea').classList.toggle('hidden');
@@ -2495,6 +2585,7 @@ $('startUseGpsBtn').addEventListener('click', () => {
   startCustomLat = startCustomLng = startCustomName = undefined;
   $('startCurrentText').textContent = t('startCurrentGps');
   $('startSearchArea').classList.add('hidden');
+  updateStartBtnLabel();
 });
 $('startSearchBtn').addEventListener('click', async () => {
   const query = $('startAddress').value.trim();
@@ -2866,6 +2957,10 @@ $('routeMapFitBtn').addEventListener('click', () => {
 });
 
 $('resetBtn').addEventListener('click', () => {
+  // guard against an accidental tap wiping out the board mid-trip — child
+  // or parent could easily hit this by mistake while handing the phone
+  // back and forth
+  if(!confirm(t('confirmEndTrip'))) return;
   hideThemePopover();
   resetRouteMapView();
   stopTracking();
@@ -2876,6 +2971,7 @@ $('resetBtn').addEventListener('click', () => {
   startCustomLat = startCustomLng = startCustomName = undefined;
   $('startCurrentText').textContent = t('startCurrentGps');
   $('startSearchArea').classList.add('hidden');
+  updateStartBtnLabel();
   routePoints = null;
   routeCumDist = null;
   completedRoutePoints = [];
@@ -2949,8 +3045,10 @@ function applyStaticTexts(){
   $('mapPickBtnText').textContent = t('mapPickBtnText');
   $('mapPickerTitle').textContent = t('mapPickerTitle');
   $('mapPickerConfirm').textContent = t('mapPickerConfirm');
+  $('mapPickerSearchInput').placeholder = t('destAddressPlaceholder');
+  $('mapPickerSearchBtn').textContent = t('searchBtn');
   $('destClearBtn').textContent = t('change');
-  $('startBtn').textContent = t('startBtn');
+  updateStartBtnLabel();
   $('setupFooterNote').textContent = t('setupFooterNote');
 
   $('optionsTitle').textContent = t('optionsTitle');
