@@ -1799,7 +1799,7 @@ function renderProgress(fraction){
   const CAR_SCALE_WAVE = 1.8;
   // the character stops growing smaller once tileCount reaches this value —
   // 100 to 300 tiles all show the same character size, matching size at 100
-  const CAR_SIZE_REF_COUNT = 100;
+  const CAR_SIZE_REF_COUNT = 50;
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // fallback reference: size at 100 tiles
   const fallbackCarSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
   let carSize;
