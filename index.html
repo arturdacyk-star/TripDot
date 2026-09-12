@@ -5,7 +5,7 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const APP_BUILD_DATE = '2026-09-12'; // ISO format
 // ============================================================
 </script>
@@ -208,6 +208,8 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     max-height:260px; overflow-y:auto;
     display:flex; flex-direction:column; gap:6px;
   }
+  .suggest-backdrop{position:fixed; inset:0; z-index:40; background:transparent;}
+  .suggest-backdrop.hidden{display:none;}
   .result-item{
     text-align:left; width:100%; border:2px solid #E4E9F0; background:#F7F9FC;
     border-radius:12px; padding:10px 12px; font-family:'Nunito'; font-size:13px;
@@ -375,6 +377,21 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
 
   .confetti-overlay{position:fixed; inset:0; z-index:400; overflow:hidden; cursor:pointer;}
   .confetti-overlay.hidden{display:none;}
+
+  .confirm-dialog-overlay{
+    position:fixed; inset:0; z-index:600; background:rgba(36,48,61,.45);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .confirm-dialog-overlay.hidden{display:none;}
+  .confirm-dialog{
+    background:var(--paper); border-radius:22px; padding:24px 22px 20px;
+    width:100%; max-width:320px; text-align:center;
+    box-shadow:0 20px 50px rgba(36,48,61,.35);
+  }
+  .confirm-dialog-icon{font-size:36px; margin-bottom:8px;}
+  .confirm-dialog-title{font-family:'Baloo 2'; font-weight:700; font-size:17px; color:var(--ink); margin-bottom:18px; line-height:1.35;}
+  .confirm-dialog-btns{display:flex; gap:10px;}
+  .confirm-dialog-btns button{width:auto; flex:1;}
   .confetti-piece{
     position:absolute; top:-20px; width:8px; height:14px; opacity:.9;
     animation-name:confettiFall; animation-timing-function:linear; animation-fill-mode:forwards;
@@ -466,14 +483,16 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
   <div class="card">
     <h2 id="destCardTitle">🎯 Dokąd jedziemy?</h2>
     <label for="destAddress" id="destAddressLabel">Adres celu</label>
-    <div class="search-wrap">
-      <div class="search-row">
-        <input type="text" id="destAddress" placeholder="np. Zakopane, Krupówki 10" autocomplete="off">
-        <button class="search-btn" id="searchBtn">Szukaj</button>
+    <div id="destSearchArea">
+      <div class="search-wrap">
+        <div class="search-row">
+          <input type="text" id="destAddress" placeholder="np. Zakopane, Krupówki 10" autocomplete="off">
+          <button class="search-btn" id="searchBtn">Szukaj</button>
+        </div>
+        <div class="results-list hidden" id="resultsList"></div>
       </div>
-      <div class="results-list hidden" id="resultsList"></div>
+      <button class="secondary-btn" id="mapPickBtn" style="margin-top:8px;">📍 <span id="mapPickBtnText">Wskaż punkt na mapie</span></button>
     </div>
-    <button class="secondary-btn" id="mapPickBtn" style="margin-top:8px;">📍 <span id="mapPickBtnText">Wskaż punkt na mapie</span></button>
     <div class="dest-chip hidden" id="destChip">
       <div class="icon">📍</div>
       <div class="txt"><b id="destChipName"></b><span id="destChipAddr"></span></div>
@@ -602,6 +621,17 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
 
     <div class="confetti-overlay hidden" id="confettiOverlay"></div>
 
+    <div class="confirm-dialog-overlay hidden" id="confirmDialogOverlay">
+      <div class="confirm-dialog">
+        <div class="confirm-dialog-icon" id="confirmDialogIcon">🏁</div>
+        <div class="confirm-dialog-title" id="confirmDialogTitle"></div>
+        <div class="confirm-dialog-btns">
+          <button class="secondary-btn" id="confirmDialogCancel"></button>
+          <button class="primary-btn" id="confirmDialogOk"></button>
+        </div>
+      </div>
+    </div>
+
     <div class="road-wrap" id="roadWrap"></div>
     <div class="route-map-wrap hidden" id="routeMapWrap">
       <div id="routeMapCanvas"></div>
@@ -617,6 +647,8 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     <div class="status-msg" id="boardStatus"></div>
   </div>
 </div>
+
+<div class="suggest-backdrop hidden" id="suggestBackdrop"></div>
 
 <div class="map-picker-overlay hidden" id="mapPickerOverlay">
   <div class="map-picker-header">
@@ -695,6 +727,8 @@ const I18N = {
     statKmLbl:'km zostało',
     resetBtn:'🏁 Zakończ podróż',
     confirmEndTrip:'Zakończyć tę podróż?',
+    confirmEndTripOk:'Tak, zakończ',
+    confirmEndTripCancel:'Anuluj',
     routeModeStraightTitle:'Dystans liczony w linii prostej',
     routeModeRouteTitle:'Dystans liczony po realnej trasie drogowej',
     msgStart:'Dopiero ruszyliśmy',
@@ -791,6 +825,8 @@ const I18N = {
     statKmLbl:'km left',
     resetBtn:'🏁 End trip',
     confirmEndTrip:'End this trip?',
+    confirmEndTripOk:'Yes, end trip',
+    confirmEndTripCancel:'Cancel',
     routeModeStraightTitle:'Distance calculated as a straight line',
     routeModeRouteTitle:'Distance calculated along the real road route',
     msgStart:'Just getting started',
@@ -1101,7 +1137,7 @@ function showDestSuggestions(query){
   const all = loadDestHistory();
   const list = q ? all.filter(r => normalizeForMatch(r.fullName).includes(q) || normalizeForMatch(r.shortName).includes(q)) : all;
   const listEl = $('resultsList');
-  if(list.length === 0){ listEl.classList.add('hidden'); listEl.innerHTML = ''; return; }
+  if(list.length === 0){ listEl.classList.add('hidden'); listEl.innerHTML = ''; hideSuggestBackdrop(); return; }
   listEl.innerHTML = '';
   const label = document.createElement('div');
   label.className = 'result-history-label';
@@ -1151,10 +1187,27 @@ function showDestSuggestions(query){
     listEl.appendChild(scrollBox);
   }
   listEl.classList.remove('hidden');
+  showSuggestBackdrop();
   $('setupStatus').textContent = '';
   $('setupStatus').classList.remove('error');
 }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+// a transparent full-screen layer shown under any open suggestion list —
+// tapping ANYWHERE else (even where a button visually sits underneath the
+// list) closes the list first, since previously there was no way at all to
+// dismiss it except picking a result, which could trap the map-pick button
+// underneath an open history dropdown
+function showSuggestBackdrop(){ $('suggestBackdrop').classList.remove('hidden'); }
+function hideSuggestBackdrop(){ $('suggestBackdrop').classList.add('hidden'); }
+function closeAllSuggestionLists(){
+  ['resultsList', 'startResultsList'].forEach(id => {
+    const el = $(id);
+    el.classList.add('hidden');
+    el.innerHTML = '';
+  });
+  hideSuggestBackdrop();
+}
+$('suggestBackdrop').addEventListener('click', closeAllSuggestionLists);
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
@@ -1532,7 +1585,13 @@ function buildPathTiles(wrap, theme, count){
   const cellH = usableH / rows;
 
   const waveFreq = (2 * Math.PI * 1.4) / cols;
-  const waveAmp = cellH * 0.30;
+  // capped in absolute px, not just proportional to cellH — otherwise at low
+  // tile counts (few, tall rows) the amplitude grows without bound and eats
+  // almost the entire vertical gap in the worstGap formula below, forcing
+  // `size` down far below what grid-layout tiles (road/forest) get at the
+  // same tile count. The wobble still looks fine capped; it just stops
+  // scaling past a point that was never buying anything visually anyway.
+  const waveAmp = Math.min(cellH * 0.30, 20);
   const footstepAmp = (theme.layout === 'zigzag') ? cellH * 0.055 : 0; // small alternating footprint offset (dino only)
 
   // worst case: two tiles in adjacent rows can wobble toward each other at
@@ -1542,7 +1601,11 @@ function buildPathTiles(wrap, theme, count){
   // dots nearly touch between rows, especially at low tile counts (few
   // rows → larger cellH → larger absolute waveAmp)
   const worstGap = cellH - 2*waveAmp - 2*footstepAmp;
-  const size = Math.max(6, Math.min(34, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.6))));
+  // upper cap only really bites at low tile counts (high counts are already
+  // constrained well below it by cellW/cellH/worstGap) — raised from 34 so
+  // wave/zigzag boards (water/piggy/dino) can get close to how big grid
+  // boards (road/forest) render at the same low tile count
+  const size = Math.max(6, Math.min(46, Math.floor(Math.min(Math.min(cellW, cellH) * 0.62, worstGap * 0.6))));
   lastTileSize = size;
 
   const centers = [];
@@ -2378,8 +2441,15 @@ async function geocodeAddress(query){
 
 function renderGenericResults(listEl, results, statusEl, onPick){
   listEl.innerHTML = '';
+  // the map-picker's own search results list lives inside its own
+  // full-screen overlay (higher z-index) — it doesn't need, and must not
+  // toggle, the shared backdrop used to dismiss the main-screen lists,
+  // otherwise closing the map picker could leave that backdrop invisibly
+  // covering (and blocking clicks on) the whole setup screen afterwards
+  const usesSharedBackdrop = listEl.id !== 'mapPickerResultsList';
   if(results.length === 0){
     listEl.classList.add('hidden');
+    if(usesSharedBackdrop) hideSuggestBackdrop();
     statusEl.textContent = t('errNoResults');
     statusEl.classList.add('error');
     return;
@@ -2392,6 +2462,7 @@ function renderGenericResults(listEl, results, statusEl, onPick){
     listEl.appendChild(btn);
   });
   listEl.classList.remove('hidden');
+  if(usesSharedBackdrop) showSuggestBackdrop();
 }
 
 /* ---- destination search ---- */
@@ -2402,7 +2473,9 @@ function selectDestination(r){
   addToDestHistory(r);
   $('resultsList').classList.add('hidden');
   $('resultsList').innerHTML = '';
+  hideSuggestBackdrop();
   $('destAddress').value = '';
+  $('destSearchArea').classList.add('hidden');
   $('destChipName').textContent = r.shortName;
   $('destChipAddr').textContent = r.fullName;
   $('destChip').classList.remove('hidden');
@@ -2413,6 +2486,7 @@ function selectDestination(r){
 $('destClearBtn').addEventListener('click', () => {
   destLat = destLng = destName = undefined;
   $('destChip').classList.add('hidden');
+  $('destSearchArea').classList.remove('hidden');
   $('startBtn').disabled = true;
   $('setupStatus').textContent = '';
   $('setupStatus').classList.remove('error');
@@ -2572,6 +2646,7 @@ function selectStartPoint(r){
   startCustomName = r.shortName;
   $('startResultsList').classList.add('hidden');
   $('startResultsList').innerHTML = '';
+  hideSuggestBackdrop();
   $('startAddress').value = '';
   $('startSearchArea').classList.add('hidden');
   $('startCurrentText').textContent = r.shortName;
@@ -2956,11 +3031,45 @@ $('routeMapFitBtn').addEventListener('click', () => {
   routeMap.fitBounds(bounds, { padding:[24,24] });
 });
 
-$('resetBtn').addEventListener('click', () => {
+// generic app-styled confirm dialog, replacing native confirm() — the
+// native one shows the page's own URL/origin in its chrome, which looks
+// like a browser error to a kid rather than an in-app question
+function showConfirmDialog(opts){
+  return new Promise(resolve => {
+    const overlay = $('confirmDialogOverlay');
+    const okBtn = $('confirmDialogOk');
+    const cancelBtn = $('confirmDialogCancel');
+    $('confirmDialogIcon').textContent = opts.icon || '❓';
+    $('confirmDialogTitle').textContent = opts.title || '';
+    okBtn.textContent = opts.okText || '';
+    cancelBtn.textContent = opts.cancelText || '';
+    overlay.classList.remove('hidden');
+    function cleanup(result){
+      overlay.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      overlay.removeEventListener('click', onBackdrop);
+      resolve(result);
+    }
+    function onOk(){ cleanup(true); }
+    function onCancel(){ cleanup(false); }
+    function onBackdrop(e){ if(e.target === overlay) cleanup(false); }
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    overlay.addEventListener('click', onBackdrop);
+  });
+}
+$('resetBtn').addEventListener('click', async () => {
   // guard against an accidental tap wiping out the board mid-trip — child
   // or parent could easily hit this by mistake while handing the phone
   // back and forth
-  if(!confirm(t('confirmEndTrip'))) return;
+  const confirmed = await showConfirmDialog({
+    icon: '🏁',
+    title: t('confirmEndTrip'),
+    okText: t('confirmEndTripOk'),
+    cancelText: t('confirmEndTripCancel')
+  });
+  if(!confirmed) return;
   hideThemePopover();
   resetRouteMapView();
   stopTracking();
@@ -2988,9 +3097,11 @@ $('resetBtn').addEventListener('click', () => {
   // starts (see trip_started above).
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
   $('destChip').classList.add('hidden');
+  $('destSearchArea').classList.remove('hidden');
   $('destAddress').value = '';
   $('resultsList').classList.add('hidden');
   $('resultsList').innerHTML = '';
+  hideSuggestBackdrop();
   $('startBtn').disabled = true;
   $('boardScreen').classList.add('hidden');
   $('setupScreen').classList.remove('hidden');
