@@ -7,7 +7,7 @@
    tiles: those are live data and should always try the network first;
    the browser's normal HTTP cache already helps with repeat tile requests.
 */
-const CACHE_NAME = 'tripdot_v12';
+const CACHE_NAME = 'tripdot_v13';
 
 const APP_SHELL = [
   './',
@@ -18,6 +18,11 @@ const APP_SHELL = [
   './icon-192-maskable.png',
   './icon-512-maskable.png',
   './favicon-32.png',
+  './vehicle-road.png',
+  './vehicle-forest.png',
+  './vehicle-water.png',
+  './vehicle-dino.png',
+  './vehicle-piggy.png',
   'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
