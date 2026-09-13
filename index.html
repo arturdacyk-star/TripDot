@@ -5,7 +5,7 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.2.3';
 const APP_BUILD_DATE = '2026-09-12'; // ISO format
 // ============================================================
 </script>
@@ -339,18 +339,24 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     width:100%; flex:1; min-height:0; border-radius:18px; overflow:hidden;
     box-shadow:0 10px 30px rgba(36,48,61,.25); position:relative;
   }
-  #routeMapCanvas{width:100%; height:100%;}
+  #routeMapCanvas{width:100%; height:100%; transform-origin:50% 50%; transition:transform .35s linear;}
   .route-map-btn-stack{
     position:absolute; right:10px; top:50%; transform:translateY(-50%); z-index:500;
     display:flex; flex-direction:column; gap:8px;
   }
-  #routeMapFitBtn, #routeMapFollowBtn{
+  #routeMapFitBtn, #routeMapFollowBtn, #routeMapRotateBtn{
     width:38px; height:38px; border-radius:50%; border:none;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
   #routeMapFollowBtn.active{background:var(--coral); color:#fff;}
+  #routeMapRotateBtn.active{background:#2D6CDF; color:#fff;}
+  #routeMapRotateBtn .compass-arrow{display:inline-block; transition:transform .3s linear;}
   .route-map-car-icon{font-size:44px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .route-map-car-icon-img{width:44px; height:44px; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .route-map-car-rotate{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    transition:transform .6s linear; transform-origin:50% 50%;
+  }
   .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
   .car-flipped{transform:scaleX(-1);}
   .car-img{display:block; filter:drop-shadow(0 2px 3px rgba(0,0,0,.25));}
@@ -640,6 +646,7 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
       <div class="route-map-btn-stack">
         <button id="routeMapFollowBtn" title="Prowadź mnie">🧭</button>
         <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⛶</button>
+        <button id="routeMapRotateBtn" title="Obróć mapę zgodnie z kierunkiem jazdy"><span class="compass-arrow">⬆</span></button>
       </div>
     </div>
 
@@ -1335,7 +1342,7 @@ function checkForSavedTrip(){
       lastAcceptedIndex: indexForProgress(maxProgress),
       lastAcceptedProgress: maxProgress,
       lastPosition: null, lastTimestamp: 0, pendingJump: null,
-      lastRawPosition: null, lastRawTimestamp: 0
+      lastRawPosition: null, lastRawTimestamp: 0, lastHeading: null
     };
     routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
     logTripEvent('trip_resumed', {});
@@ -1799,7 +1806,7 @@ function renderProgress(fraction){
   const CAR_SCALE_WAVE = 1.8;
   // the character stops growing smaller once tileCount reaches this value —
   // 100 to 300 tiles all show the same character size, matching size at 100
-  const CAR_SIZE_REF_COUNT = 50;
+  const CAR_SIZE_REF_COUNT = 100;
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // fallback reference: size at 100 tiles
   const fallbackCarSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
   let carSize;
@@ -1935,7 +1942,7 @@ $('confettiOverlay').addEventListener('click', dismissConfetti);
    dokładniejsze. Dodatkowo porównujemy kierunek jazdy z kierunkiem odcinka,
    żeby nie pomylić np. mostu z równoległą drogą serwisową pod spodem.
 */
-let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+let gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0, lastHeading:null};
 let routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
 let routeMeta = {segments:null};
 
@@ -2002,6 +2009,14 @@ function bearing(lat1, lng1, lat2, lng2){
   return (Math.atan2(Math.sin(dl)*Math.cos(p2), Math.cos(p1)*Math.sin(p2) - Math.sin(p1)*Math.cos(p2)*Math.cos(dl)) * 180/Math.PI + 360) % 360;
 }
 function angleDiff(a, b){ return Math.abs((a - b + 540) % 360 - 180); }
+// best available heading in degrees (0=north, clockwise), for rotating the
+// vehicle icon and, in track-up mode, the map itself — falls back to the
+// route's own initial direction before the first real GPS movement exists
+function currentHeading(){
+  if(gpsState.lastHeading !== null) return gpsState.lastHeading;
+  if(routeMeta && routeMeta.segments && routeMeta.segments.length) return routeMeta.segments[0].heading;
+  return 0;
+}
 
 function projectGpsToRoute(lat, lng, accuracy){
   if(!routePoints || routePoints.length < 2 || !routeMeta.segments) return null;
@@ -2028,6 +2043,11 @@ function projectGpsToRoute(lat, lng, accuracy){
   if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
     move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
     gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+    // only trust it as the "current heading" (used to rotate the vehicle
+    // icon and, in track-up mode, the map itself) once we've moved a real
+    // distance — GPS noise while stationary or crawling can otherwise spin
+    // the heading wildly with no actual direction change to justify it
+    if(gpsBearing !== null && move > 0.005) gpsState.lastHeading = gpsBearing;
   }
   const testRange = (from, to) => {
     for(let i = from; i <= to; i++){
@@ -2757,7 +2777,7 @@ $('startBtn').addEventListener('click', async () => {
   // gets recalculated mid-trip, since totalDistance itself is overwritten
   // on every recalculation to reflect only the remaining segment
   originalTotalDistance = totalDistance;
-  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0, lastHeading:null};
 
   if(totalDistance < 0.05){
     statusEl.textContent = t('errAlreadyThere');
@@ -2834,8 +2854,62 @@ $('themeSwitchBtn').addEventListener('click', () => {
 let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapCarMarker = null,
     routeMapStartMarker = null, routeMapDestMarker = null,
     boardViewMode = 'board', // 'board' | 'map' | 'split'
-    mapFollowActive = false;
+    mapFollowActive = false,
+    mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
+    mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
 const MAP_FOLLOW_ZOOM = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving)
+// how much bigger than its viewport the map canvas is made while rotated,
+// so a rotated corner never exposes empty space outside the visible,
+// clipped .route-map-wrap — sqrt(2)≈1.414 covers the worst case (45°)
+// exactly, 1.5 leaves a bit of comfortable margin
+const MAP_ROTATE_OVERSIZE = 1.5;
+
+// Switches between north-up (locked at 0°) and track-up (follows heading).
+// Resizes/repositions the map container ONLY here — that's the one change
+// Leaflet actually needs to re-measure via invalidateSize(). Heading updates
+// afterward (applyMapRotationAngle) only touch the CSS rotation value,
+// which Leaflet never needs to know about, so they can run on every GPS fix
+// without any layout cost.
+//
+// Known limitation: manually dragging the map while in track-up mode can
+// feel a little off, since Leaflet's own drag handling still reasons in
+// raw, unrotated screen-pixel deltas — it doesn't know the visual result is
+// rotated. Auto-follow (which recenters the map for you) is unaffected,
+// and is the primary way this app moves the map while driving.
+function setTrackUpMode(enabled){
+  mapTrackUpMode = enabled;
+  const canvas = $('routeMapCanvas');
+  if(!canvas) return;
+  if(enabled){
+    // enlarge + re-center the container so a rotated corner never exposes
+    // empty space past .route-map-wrap's overflow:hidden edge
+    const oversizePct = Math.round(MAP_ROTATE_OVERSIZE * 100);
+    const offsetPct = -Math.round((MAP_ROTATE_OVERSIZE - 1) * 50);
+    canvas.style.position = 'absolute';
+    canvas.style.width = oversizePct + '%';
+    canvas.style.height = oversizePct + '%';
+    canvas.style.left = offsetPct + '%';
+    canvas.style.top = offsetPct + '%';
+  } else {
+    canvas.style.position = '';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.left = '0';
+    canvas.style.top = '0';
+  }
+  if(routeMap) routeMap.invalidateSize({ pan:false });
+  applyMapRotationAngle(enabled ? -currentHeading() : 0);
+  $('routeMapRotateBtn').classList.toggle('active', enabled);
+}
+// Cheap: just updates the map's and compass arrow's CSS rotation. Safe to
+// call on every GPS/heading update.
+function applyMapRotationAngle(deg){
+  mapRotationAngle = ((deg % 360) + 360) % 360;
+  const canvas = $('routeMapCanvas');
+  if(canvas) canvas.style.transform = 'rotate(' + mapRotationAngle + 'deg)';
+  const arrow = document.querySelector('#routeMapRotateBtn .compass-arrow');
+  if(arrow) arrow.style.transform = 'rotate(' + mapRotationAngle + 'deg)';
+}
 
 function ensureRouteMap(){
   if(routeMap) return;
@@ -2937,9 +3011,14 @@ function updateRouteMapLineSplit(){
 // different road shows up visibly off the drawn route line instead of
 // looking like they're on track when they aren't
 function routeMapMarkerHtml(theme){
-  return theme.vehicleImg
+  const icon = theme.vehicleImg
     ? '<img class="route-map-car-icon route-map-car-icon-img" src="' + theme.vehicleImg + '" alt="">'
     : '<span class="route-map-car-icon">' + theme.vehicle + '</span>';
+  // separate rotating wrapper: Leaflet applies its own transform (translate3d)
+  // directly to the outer marker element to POSITION it on the map — putting
+  // our heading rotation on that same element would fight with Leaflet's own
+  // transform instead of combining with it
+  return '<div class="route-map-car-rotate">' + icon + '</div>';
 }
 function updateRouteMapCarPosition(){
   if(!routeMap || boardViewMode === 'board') return;
@@ -2950,6 +3029,7 @@ function updateRouteMapCarPosition(){
     const icon = L.divIcon({ className:'route-map-car-marker', html:routeMapMarkerHtml(theme), iconSize:[52,52], iconAnchor:[26,26] });
     routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
     routeMapCarMarker._vehicleEmoji = theme.vehicle;
+    routeMapCarMarker._rotateEl = routeMapCarMarker.getElement().querySelector('.route-map-car-rotate');
   } else {
     routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
     // the marker previously kept whatever vehicle emoji it was created
@@ -2958,8 +3038,18 @@ function updateRouteMapCarPosition(){
     if(routeMapCarMarker._vehicleEmoji !== theme.vehicle){
       routeMapCarMarker.setIcon(L.divIcon({ className:'route-map-car-marker', html:routeMapMarkerHtml(theme), iconSize:[52,52], iconAnchor:[26,26] }));
       routeMapCarMarker._vehicleEmoji = theme.vehicle;
+      routeMapCarMarker._rotateEl = routeMapCarMarker.getElement().querySelector('.route-map-car-rotate');
     }
   }
+  // always rotate the icon to the true compass heading. Combined with the
+  // map's own rotation (0° in north-up, -heading in track-up — see
+  // setTrackUpMode/applyMapRotationAngle) this nets out to exactly what
+  // each mode should show: true compass direction in north-up, and always
+  // pointing straight up (since the map itself rotated to compensate) in
+  // track-up.
+  const heading = currentHeading();
+  if(routeMapCarMarker._rotateEl) routeMapCarMarker._rotateEl.style.transform = 'rotate(' + heading + 'deg)';
+  if(mapTrackUpMode) applyMapRotationAngle(-heading);
   if(mapFollowActive){
     routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
   }
@@ -2985,6 +3075,7 @@ function resetRouteMapView(){
   mapFollowActive = false;
   const followBtn = $('routeMapFollowBtn');
   if(followBtn) followBtn.classList.remove('active');
+  if(mapTrackUpMode) setTrackUpMode(false);
   applyBoardViewMode();
   if(routeMapLineDone && routeMap){ routeMap.removeLayer(routeMapLineDone); routeMapLineDone = null; }
   if(routeMapLineTodo && routeMap){ routeMap.removeLayer(routeMapLineTodo); routeMapLineTodo = null; }
@@ -3033,6 +3124,10 @@ $('routeMapFitBtn').addEventListener('click', () => {
   $('routeMapFollowBtn').classList.remove('active');
   const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
   routeMap.fitBounds(bounds, { padding:[24,24] });
+});
+
+$('routeMapRotateBtn').addEventListener('click', () => {
+  setTrackUpMode(!mapTrackUpMode);
 });
 
 // generic app-styled confirm dialog, replacing native confirm() — the
@@ -3099,7 +3194,7 @@ $('resetBtn').addEventListener('click', async () => {
   // log for the trip you just finished before you get a chance to copy it
   // from Options. It's reset instead at the moment a new trip actually
   // starts (see trip_started above).
-  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0};
+  gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0, lastHeading:null};
   $('destChip').classList.add('hidden');
   $('destSearchArea').classList.remove('hidden');
   $('destAddress').value = '';
