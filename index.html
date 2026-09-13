@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.5';
-const APP_BUILD_DATE = '2026-09-12'; // ISO format
+const APP_VERSION = '1.2.6';
+const APP_BUILD_DATE = '2026-09-13'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -2950,7 +2950,20 @@ function applyMapRotationAngle(deg){
 // mode — the two together (rotate(-R) then scaleX) net out to a pure
 // mirror, exactly matching the sprite's natural, undistorted look.
 function updateVehicleMarkerOrientation(){
-  if(!routeMapCarMarker || !routeMapCarMarker._rotateEl) return;
+  if(!routeMapCarMarker) return;
+  // self-healing: if the very first attempt to grab this element (right
+  // after creating the marker) ever raced with Leaflet not having built
+  // the icon's DOM yet, _rotateEl silently stayed empty forever after,
+  // permanently skipping this whole function with no visible error — the
+  // vehicle icon then just inherits the map's raw rotation unmirrored and
+  // un-corrected, which is exactly the "stuck upside down" symptom. Re-check
+  // and re-fetch here so it recovers on the very next call instead of
+  // requiring a theme switch (which forces a fresh marker) to fix it.
+  if(!routeMapCarMarker._rotateEl || !routeMapCarMarker._rotateEl.isConnected){
+    const el = routeMapCarMarker.getElement();
+    routeMapCarMarker._rotateEl = el ? el.querySelector('.route-map-car-rotate') : null;
+  }
+  if(!routeMapCarMarker._rotateEl) return;
   const heading = currentHeading();
   const flip = Math.sin(heading * Math.PI / 180) < 0 ? -1 : 1; // < 0 → heading has a westward component
   routeMapCarMarker._rotateEl.style.transform = 'rotate(' + (-mapRotationAngle) + 'deg) scaleX(' + flip + ')';
@@ -3126,7 +3139,8 @@ function updateRouteMapCarPosition(){
     const icon = L.divIcon({ className:'route-map-car-marker', html:routeMapMarkerHtml(theme), iconSize:[52,52], iconAnchor:[26,26] });
     routeMapCarMarker = L.marker([pos.lat, pos.lng], { icon }).addTo(routeMap);
     routeMapCarMarker._vehicleEmoji = theme.vehicle;
-    routeMapCarMarker._rotateEl = routeMapCarMarker.getElement().querySelector('.route-map-car-rotate');
+    const el0 = routeMapCarMarker.getElement();
+    routeMapCarMarker._rotateEl = el0 ? el0.querySelector('.route-map-car-rotate') : null;
   } else {
     routeMapCarMarker.setLatLng([pos.lat, pos.lng]);
     // the marker previously kept whatever vehicle emoji it was created
@@ -3135,7 +3149,8 @@ function updateRouteMapCarPosition(){
     if(routeMapCarMarker._vehicleEmoji !== theme.vehicle){
       routeMapCarMarker.setIcon(L.divIcon({ className:'route-map-car-marker', html:routeMapMarkerHtml(theme), iconSize:[52,52], iconAnchor:[26,26] }));
       routeMapCarMarker._vehicleEmoji = theme.vehicle;
-      routeMapCarMarker._rotateEl = routeMapCarMarker.getElement().querySelector('.route-map-car-rotate');
+      const el1 = routeMapCarMarker.getElement();
+      routeMapCarMarker._rotateEl = el1 ? el1.querySelector('.route-map-car-rotate') : null;
     }
   }
   // refresh heading-dependent visuals every tick: the map's own rotation
