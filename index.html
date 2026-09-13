@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.4';
-const APP_BUILD_DATE = '2026-09-13'; // ISO format
+const APP_VERSION = '1.2.5';
+const APP_BUILD_DATE = '2026-09-12'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -353,7 +353,13 @@ const APP_BUILD_DATE = '2026-09-13'; // ISO format
   .route-map-car-icon-img{width:44px; height:44px; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .route-map-car-rotate{
     width:100%; height:100%; display:flex; align-items:center; justify-content:center;
-    transition:transform .6s linear; transform-origin:50% 50%;
+    /* MUST match #routeMapCanvas's transition duration/easing exactly — the
+       canvas rotates by +R and this wrapper by -R at the same instant, and
+       the two only cancel out at every point in time (not just at the very
+       end) if they animate in perfect lockstep. A mismatch here is what
+       made the vehicle icon visibly spin through upside-down angles while
+       the two transitions were briefly out of sync. */
+    transition:transform .35s linear; transform-origin:50% 50%;
   }
   .leaflet-marker-icon.route-map-car-marker{transition:transform .8s linear;}
   .car-flipped{transform:scaleX(-1);}
@@ -2855,11 +2861,40 @@ let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapC
     mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
     mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
 const MAP_FOLLOW_ZOOM = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving)
-// how much bigger than its viewport the map canvas is made while rotated,
-// so a rotated corner never exposes empty space outside the visible,
-// clipped .route-map-wrap — sqrt(2)≈1.414 covers the worst case (45°)
-// exactly, 1.5 leaves a bit of comfortable margin
-const MAP_ROTATE_OVERSIZE = 1.5;
+// safety margin on top of the exact minimum oversize needed (see
+// resizeRotatedMapCanvas) — 1.0 would be the mathematical minimum, a hair
+// more avoids razor-thin edge cases from sub-pixel rounding
+const MAP_ROTATE_SAFETY_MARGIN = 1.06;
+
+// Sizes/positions the (rotated) map canvas so it always fully covers
+// .route-map-wrap at any rotation angle.
+//
+// A fixed percentage (e.g. always 150%) only works if the viewport is
+// roughly square — that was the original bug: a tall, narrow fullscreen
+// phone viewport needs proportionally much MORE horizontal oversize than a
+// small, roughly-square split-view panel, since what actually needs
+// covering is the viewport's own diagonal, not each side independently.
+// A square canvas sized to that diagonal (in both width AND height) covers
+// the viewport at every possible rotation angle, including the 45° worst
+// case, so this is computed from the wrap's real current pixel size rather
+// than a fixed CSS percentage.
+function resizeRotatedMapCanvas(){
+  const canvas = $('routeMapCanvas');
+  const wrap = $('routeMapWrap');
+  if(!canvas || !wrap) return;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if(w === 0 || h === 0) return; // not laid out yet — nothing to size against
+  const diag = Math.ceil(Math.sqrt(w * w + h * h) * MAP_ROTATE_SAFETY_MARGIN);
+  canvas.style.position = 'absolute';
+  canvas.style.width = diag + 'px';
+  canvas.style.height = diag + 'px';
+  canvas.style.left = Math.round((w - diag) / 2) + 'px';
+  canvas.style.top = Math.round((h - diag) / 2) + 'px';
+  if(routeMap) routeMap.invalidateSize({ pan:false });
+}
+// re-fit whenever the viewport itself changes shape (rotating the phone,
+// resizing the window) while track-up mode is active
+window.addEventListener('resize', () => { if(mapTrackUpMode) resizeRotatedMapCanvas(); });
 
 // Switches between north-up (locked at 0°) and track-up (follows heading).
 // Resizes/repositions the map container ONLY here — that's the one change
@@ -2876,15 +2911,7 @@ function setTrackUpMode(enabled){
   const canvas = $('routeMapCanvas');
   if(!canvas) return;
   if(enabled){
-    // enlarge + re-center the container so a rotated corner never exposes
-    // empty space past .route-map-wrap's overflow:hidden edge
-    const oversizePct = Math.round(MAP_ROTATE_OVERSIZE * 100);
-    const offsetPct = -Math.round((MAP_ROTATE_OVERSIZE - 1) * 50);
-    canvas.style.position = 'absolute';
-    canvas.style.width = oversizePct + '%';
-    canvas.style.height = oversizePct + '%';
-    canvas.style.left = offsetPct + '%';
-    canvas.style.top = offsetPct + '%';
+    resizeRotatedMapCanvas();
   } else {
     canvas.style.position = '';
     canvas.style.width = '100%';
@@ -3131,6 +3158,10 @@ function applyBoardViewMode(){
     ensureRouteMap();
     setTimeout(() => {
       routeMap.invalidateSize();
+      // .route-map-wrap's own size just changed (split <-> fullscreen), so
+      // a track-up rotation sized for the OLD shape could newly expose
+      // empty corners (or be needlessly oversized) in the new one
+      if(mapTrackUpMode) resizeRotatedMapCanvas();
       renderRouteMap(true);
     }, 0);
   }
