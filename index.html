@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.3';
-const APP_BUILD_DATE = '2026-09-12'; // ISO format
+const APP_VERSION = '1.2.4';
+const APP_BUILD_DATE = '2026-09-13'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -344,13 +344,11 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     position:absolute; right:10px; top:50%; transform:translateY(-50%); z-index:500;
     display:flex; flex-direction:column; gap:8px;
   }
-  #routeMapFitBtn, #routeMapFollowBtn, #routeMapRotateBtn{
+  #routeMapFitBtn, #routeMapFollowBtn{
     width:38px; height:38px; border-radius:50%; border:none;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.3); font-size:17px; cursor:pointer;
   }
-  #routeMapFollowBtn.active{background:var(--coral); color:#fff;}
-  #routeMapRotateBtn.active{background:#2D6CDF; color:#fff;}
-  #routeMapRotateBtn .compass-arrow{display:inline-block; transition:transform .3s linear;}
+  #routeMapFollowBtn.active, #routeMapFitBtn.active{background:var(--coral); color:#fff;}
   .route-map-car-icon{font-size:44px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .route-map-car-icon-img{width:44px; height:44px; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .route-map-car-rotate{
@@ -644,9 +642,8 @@ const APP_BUILD_DATE = '2026-09-12'; // ISO format
     <div class="route-map-wrap hidden" id="routeMapWrap">
       <div id="routeMapCanvas"></div>
       <div class="route-map-btn-stack">
-        <button id="routeMapFollowBtn" title="Prowadź mnie">🧭</button>
-        <button id="routeMapFitBtn" title="Dopasuj widok do trasy">⛶</button>
-        <button id="routeMapRotateBtn" title="Obróć mapę zgodnie z kierunkiem jazdy"><span class="compass-arrow">⬆</span></button>
+        <button id="routeMapFollowBtn" title="Podążaj za pojazdem (obraca mapę zgodnie z kierunkiem jazdy)">🧭</button>
+        <button id="routeMapFitBtn" class="active" title="Pokaż całą trasę">⛶</button>
       </div>
     </div>
 
@@ -721,7 +718,7 @@ const I18N = {
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa. Przyda się też do śledzenia lotu samolotem.',
     diagCardTitle:'🛠️ Diagnostyka',
     aboutCardTitle:'ℹ️ O appce',
-    aboutBlurb:'TripDot powstał z pomysłu, żeby uprzyjemnić rodzinne podróże samochodem — rozwijam go po godzinach, dla własnej rodziny.',
+    aboutBlurb:'TripDot powstał, żeby odpowiedzieć na pytanie "daleko jeszcze?" i ułatwić rodzinne podróże samochodem, samolotem czy nawet piesze (w górach - tryb linii prostej do celu).',
     aboutVersionLabel:'Wersja',
     aboutPrivacyLink:'Polityka prywatności',
     aboutCredits:'Mapy i trasy: © OpenStreetMap, Nominatim, Mapbox, OSRM. Generowanie motywów: Google Gemini.',
@@ -819,7 +816,7 @@ const I18N = {
     straightLineSub:"Don't calculate the real road route, even when the internet works. Also handy for tracking a flight.",
     diagCardTitle:'🛠️ Diagnostics',
     aboutCardTitle:'ℹ️ About',
-    aboutBlurb:'TripDot started as an idea to make family car trips more fun — I\'m developing it in my spare time, for my own family.',
+    aboutBlurb:'TripDot was created to answer the question "are we there yet?" and make family trips easier — by car, by plane, or even on foot (in the mountains — straight-line-to-destination mode).',
     aboutVersionLabel:'Version',
     aboutPrivacyLink:'Privacy policy',
     aboutCredits:'Maps and routing: © OpenStreetMap, Nominatim, Mapbox, OSRM. Theme generation: Google Gemini.',
@@ -2871,11 +2868,9 @@ const MAP_ROTATE_OVERSIZE = 1.5;
 // which Leaflet never needs to know about, so they can run on every GPS fix
 // without any layout cost.
 //
-// Known limitation: manually dragging the map while in track-up mode can
-// feel a little off, since Leaflet's own drag handling still reasons in
-// raw, unrotated screen-pixel deltas — it doesn't know the visual result is
-// rotated. Auto-follow (which recenters the map for you) is unaffected,
-// and is the primary way this app moves the map while driving.
+// Leaflet's own dragging is swapped out for our own corrected version (see
+// the pointer handlers further down) while in this mode, since Leaflet's
+// drag math doesn't know the map is visually rotated.
 function setTrackUpMode(enabled){
   mapTrackUpMode = enabled;
   const canvas = $('routeMapCanvas');
@@ -2899,17 +2894,92 @@ function setTrackUpMode(enabled){
   }
   if(routeMap) routeMap.invalidateSize({ pan:false });
   applyMapRotationAngle(enabled ? -currentHeading() : 0);
-  $('routeMapRotateBtn').classList.toggle('active', enabled);
+  // manual dragging needs its own screen-vector correction while the map is
+  // visually rotated — see the pointer handlers below — since Leaflet's own
+  // dragging reasons in raw, unrotated screen pixels and would otherwise
+  // feel completely wrong (dragging up could pan the map sideways, etc.)
+  if(routeMap && routeMap.dragging){
+    if(enabled) routeMap.dragging.disable(); else routeMap.dragging.enable();
+  }
+  const canvasForTouch = $('routeMapCanvas');
+  if(canvasForTouch) canvasForTouch.style.touchAction = enabled ? 'none' : '';
 }
-// Cheap: just updates the map's and compass arrow's CSS rotation. Safe to
-// call on every GPS/heading update.
+// Cheap: updates the map's CSS rotation and keeps the vehicle icon
+// correctly oriented. Safe to call on every GPS/heading update.
 function applyMapRotationAngle(deg){
   mapRotationAngle = ((deg % 360) + 360) % 360;
   const canvas = $('routeMapCanvas');
   if(canvas) canvas.style.transform = 'rotate(' + mapRotationAngle + 'deg)';
-  const arrow = document.querySelector('#routeMapRotateBtn .compass-arrow');
-  if(arrow) arrow.style.transform = 'rotate(' + mapRotationAngle + 'deg)';
+  updateVehicleMarkerOrientation();
 }
+// The vehicle art is a side-view sprite (see vehicle-*.png) — it was never
+// drawn to be rotated to an arbitrary angle, so full rotation (an earlier
+// version of this feature) made it look upside-down at some headings, e.g.
+// pointing south. Real vehicle icon apps handle this the same way: only
+// ever mirror left/right, never rotate. The mirror is based on the true
+// compass heading; the (-mapRotationAngle) counter-rotation cancels out
+// the map container's own rotation, since the marker is a DOM descendant
+// of it and would otherwise visually spin along with the map in track-up
+// mode — the two together (rotate(-R) then scaleX) net out to a pure
+// mirror, exactly matching the sprite's natural, undistorted look.
+function updateVehicleMarkerOrientation(){
+  if(!routeMapCarMarker || !routeMapCarMarker._rotateEl) return;
+  const heading = currentHeading();
+  const flip = Math.sin(heading * Math.PI / 180) < 0 ? -1 : 1; // < 0 → heading has a westward component
+  routeMapCarMarker._rotateEl.style.transform = 'rotate(' + (-mapRotationAngle) + 'deg) scaleX(' + flip + ')';
+}
+
+// ---- manual drag-to-pan correction while the map is visually rotated ----
+// Leaflet's own dragging math only ever reasons in raw, unrotated screen
+// pixels, so with the map rotated (track-up mode) a native drag feels
+// backwards/sideways depending on the current heading. Fix: Leaflet's own
+// dragging is disabled in that mode (see setTrackUpMode) and we drive
+// panning ourselves — rotating each raw pointer-movement vector by
+// -mapRotationAngle before handing it to the map turns it back into
+// exactly what Leaflet would have seen if the map were still north-up, so
+// dragging feels normal again regardless of which way the map is turned.
+//
+// Known simplification: this has no momentum/inertia after release, unlike
+// Leaflet's native dragging — the map just stops the instant you lift your
+// finger. Auto-follow (the main way this app moves the map while driving)
+// is unaffected either way.
+let mapDragState = null;
+function mapDragPointerDown(e){
+  if(!mapTrackUpMode || !routeMap) return;
+  mapDragState = { lastX: e.clientX, lastY: e.clientY, dragging: false, pointerId: e.pointerId };
+}
+function mapDragPointerMove(e){
+  if(!mapDragState || e.pointerId !== mapDragState.pointerId) return;
+  const dx = e.clientX - mapDragState.lastX;
+  const dy = e.clientY - mapDragState.lastY;
+  if(!mapDragState.dragging){
+    // ignore tiny jitter so a simple tap never turns into an accidental pan
+    if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    mapDragState.dragging = true;
+  }
+  e.preventDefault();
+  mapDragState.lastX = e.clientX;
+  mapDragState.lastY = e.clientY;
+  const rad = -mapRotationAngle * Math.PI / 180;
+  const correctedDx = dx * Math.cos(rad) - dy * Math.sin(rad);
+  const correctedDy = dx * Math.sin(rad) + dy * Math.cos(rad);
+  // sign matches the usual "grab and drag" convention (map content follows
+  // your finger) — this is the one thing here worth double-checking on a
+  // real device; if it ever feels inverted, dropping the two unary minuses
+  // below is the whole fix
+  routeMap.panBy([-correctedDx, -correctedDy], { animate:false });
+}
+function mapDragPointerUp(e){
+  if(mapDragState && e.pointerId === mapDragState.pointerId) mapDragState = null;
+}
+(function initMapDragCorrection(){
+  const el = $('routeMapCanvas');
+  if(!el) return;
+  el.addEventListener('pointerdown', mapDragPointerDown);
+  el.addEventListener('pointermove', mapDragPointerMove, { passive:false });
+  el.addEventListener('pointerup', mapDragPointerUp);
+  el.addEventListener('pointercancel', mapDragPointerUp);
+})();
 
 function ensureRouteMap(){
   if(routeMap) return;
@@ -3041,15 +3111,11 @@ function updateRouteMapCarPosition(){
       routeMapCarMarker._rotateEl = routeMapCarMarker.getElement().querySelector('.route-map-car-rotate');
     }
   }
-  // always rotate the icon to the true compass heading. Combined with the
-  // map's own rotation (0° in north-up, -heading in track-up — see
-  // setTrackUpMode/applyMapRotationAngle) this nets out to exactly what
-  // each mode should show: true compass direction in north-up, and always
-  // pointing straight up (since the map itself rotated to compensate) in
-  // track-up.
+  // refresh heading-dependent visuals every tick: the map's own rotation
+  // (only in track-up mode) and the vehicle icon's mirror/counter-rotation
+  // (always, in both modes — see updateVehicleMarkerOrientation)
   const heading = currentHeading();
-  if(routeMapCarMarker._rotateEl) routeMapCarMarker._rotateEl.style.transform = 'rotate(' + heading + 'deg)';
-  if(mapTrackUpMode) applyMapRotationAngle(-heading);
+  applyMapRotationAngle(mapTrackUpMode ? -heading : 0);
   if(mapFollowActive){
     routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
   }
@@ -3075,6 +3141,8 @@ function resetRouteMapView(){
   mapFollowActive = false;
   const followBtn = $('routeMapFollowBtn');
   if(followBtn) followBtn.classList.remove('active');
+  const fitBtn = $('routeMapFitBtn');
+  if(fitBtn) fitBtn.classList.add('active');
   if(mapTrackUpMode) setTrackUpMode(false);
   applyBoardViewMode();
   if(routeMapLineDone && routeMap){ routeMap.removeLayer(routeMapLineDone); routeMapLineDone = null; }
@@ -3109,25 +3177,33 @@ $('tileCountToggleBtn').addEventListener('click', () => {
   saveTripState();
 });
 
+// 🧭 turns on "navigation mode": auto-follow + track-up rotation together.
+// Tapping it again while already active is a deliberate no-op — the only
+// way out is the ⛶ button, so the two buttons act as one clear two-state
+// switch rather than three independently-toggleable options.
 $('routeMapFollowBtn').addEventListener('click', () => {
-  mapFollowActive = !mapFollowActive;
-  $('routeMapFollowBtn').classList.toggle('active', mapFollowActive);
-  if(mapFollowActive && routeMap){
+  if(mapFollowActive) return; // already in navigation mode
+  mapFollowActive = true;
+  $('routeMapFollowBtn').classList.add('active');
+  $('routeMapFitBtn').classList.remove('active');
+  setTrackUpMode(true);
+  if(routeMap){
     const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
     if(pos) routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
   }
 });
 
+// ⛶ is the way out of navigation mode: stops following, un-rotates back to
+// north-up, and (as before) shows the whole route
 $('routeMapFitBtn').addEventListener('click', () => {
-  if(!routeMap || !routeMapLineDone || !routeMapLineTodo) return;
   mapFollowActive = false;
   $('routeMapFollowBtn').classList.remove('active');
-  const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
-  routeMap.fitBounds(bounds, { padding:[24,24] });
-});
-
-$('routeMapRotateBtn').addEventListener('click', () => {
-  setTrackUpMode(!mapTrackUpMode);
+  $('routeMapFitBtn').classList.add('active');
+  setTrackUpMode(false);
+  if(routeMap && routeMapLineDone && routeMapLineTodo){
+    const bounds = routeMapLineDone.getBounds().extend(routeMapLineTodo.getBounds());
+    routeMap.fitBounds(bounds, { padding:[24,24] });
+  }
 });
 
 // generic app-styled confirm dialog, replacing native confirm() — the
