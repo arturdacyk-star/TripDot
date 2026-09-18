@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.6';
-const APP_BUILD_DATE = '2026-09-13'; // ISO format
+const APP_VERSION = '1.2.7';
+const APP_BUILD_DATE = '2026-09-18'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -1809,7 +1809,7 @@ function renderProgress(fraction){
   const CAR_SCALE_WAVE = 1.8;
   // the character stops growing smaller once tileCount reaches this value —
   // 100 to 300 tiles all show the same character size, matching size at 100
-  const CAR_SIZE_REF_COUNT = 50;
+  const CAR_SIZE_REF_COUNT = 100;
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // fallback reference: size at 100 tiles
   const fallbackCarSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
   let carSize;
@@ -3177,7 +3177,15 @@ function applyBoardViewMode(){
       // a track-up rotation sized for the OLD shape could newly expose
       // empty corners (or be needlessly oversized) in the new one
       if(mapTrackUpMode) resizeRotatedMapCanvas();
-      renderRouteMap(true);
+      // while following the vehicle, keep the current zoomed-in, centered
+      // view instead of fitting the whole route — that fitBounds was
+      // unconditional before, so every switch between board/map/split
+      // silently reset (zoomed out of) navigation mode
+      renderRouteMap(!mapFollowActive);
+      if(mapFollowActive){
+        const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
+        if(pos) routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:false });
+      }
     }, 0);
   }
 }
