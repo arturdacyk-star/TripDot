@@ -5,7 +5,7 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.7';
+const APP_VERSION = '1.2.8';
 const APP_BUILD_DATE = '2026-09-18'; // ISO format
 // ============================================================
 </script>
@@ -2014,11 +2014,33 @@ function bearing(lat1, lng1, lat2, lng2){
 function angleDiff(a, b){ return Math.abs((a - b + 540) % 360 - 180); }
 // best available heading in degrees (0=north, clockwise), for rotating the
 // vehicle icon and, in track-up mode, the map itself — falls back to the
-// route's own initial direction before the first real GPS movement exists
+// route's own initial direction before the first real GPS movement exists,
+// or (straight-line mode, no route segments at all) to the direct bearing
+// from start to destination — i.e. the straight line itself
 function currentHeading(){
   if(gpsState.lastHeading !== null) return gpsState.lastHeading;
   if(routeMeta && routeMeta.segments && routeMeta.segments.length) return routeMeta.segments[0].heading;
+  if(startLat !== undefined && startLng !== undefined && destLat !== undefined && destLng !== undefined){
+    return bearing(startLat, startLng, destLat, destLng);
+  }
   return 0;
+}
+
+// Updates gpsState.lastHeading from two consecutive raw GPS fixes. This
+// used to live inline inside projectGpsToRoute(), which is only ever
+// called when usingRoute is true — meaning in straight-line mode (e.g. the
+// hiking/flight-tracking case) the heading NEVER updated, no matter how
+// much you actually moved: currentHeading() stayed stuck at its 0°
+// fallback forever, and track-up mode/vehicle mirroring silently never
+// worked. This must run unconditionally, regardless of routing mode.
+function updateHeadingFromRawGps(lat, lng){
+  if(!gpsState.lastRawPosition || !gpsState.lastRawTimestamp) return;
+  const move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+  const gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+  // only trust it as the "current heading" once we've moved a real
+  // distance — GPS noise while stationary or crawling can otherwise spin
+  // the heading wildly with no actual direction change to justify it
+  if(gpsBearing !== null && move > 0.005) gpsState.lastHeading = gpsBearing;
 }
 
 function projectGpsToRoute(lat, lng, accuracy){
@@ -2035,22 +2057,14 @@ function projectGpsToRoute(lat, lng, accuracy){
   const start = fullSearch ? 0 : Math.max(0, gpsState.lastAcceptedIndex - 20);
   const end = fullSearch ? (routeMeta.segments.length - 1) : Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
   let best = null;
+  // move/gpsBearing here are purely for THIS function's own off-route/
+  // wrong-way detection below — gpsState.lastHeading itself is now updated
+  // separately by updateHeadingFromRawGps(), unconditionally, regardless of
+  // whether a real route is even in use (see that function's comment)
   let move = 0, gpsBearing = null;
-  // heading is computed from the raw, always-updated previous GPS fix —
-  // NOT gpsState.lastPosition, which only advances when a fix is accepted.
-  // While several fixes in a row are off-route (each returns early without
-  // touching lastPosition), lastPosition would otherwise stay frozen at an
-  // increasingly stale point, producing a bearing that no longer reflects
-  // where you're actually currently heading — that was causing spurious,
-  // repeated headingMismatch flags right after a fresh recalculation.
   if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
     move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
     gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
-    // only trust it as the "current heading" (used to rotate the vehicle
-    // icon and, in track-up mode, the map itself) once we've moved a real
-    // distance — GPS noise while stationary or crawling can otherwise spin
-    // the heading wildly with no actual direction change to justify it
-    if(gpsBearing !== null && move > 0.005) gpsState.lastHeading = gpsBearing;
   }
   const testRange = (from, to) => {
     for(let i = from; i <= to; i++){
@@ -2122,6 +2136,12 @@ function acceptProgressFromGps(pos){
   if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
   const now = performance.now();
 
+  // updateHeadingFromRawGps needs the PREVIOUS raw fix, so it must run
+  // (like projectGpsToRoute) before lastRawPosition/lastRawTimestamp below
+  // advance to this fix. Unconditional regardless of usingRoute — straight-
+  // line mode (hiking/flight-tracking) needs a live heading too, for its
+  // own track-up/vehicle-mirroring, just as much as real-route mode does.
+  updateHeadingFromRawGps(lat, lng);
   // projectGpsToRoute needs the PREVIOUS raw fix (to compute heading), so
   // read the match first — then advance lastRawPosition/lastRawTimestamp
   // to this fix. This must happen unconditionally, before any early
