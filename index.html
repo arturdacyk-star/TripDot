@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.8';
-const APP_BUILD_DATE = '2026-09-18'; // ISO format
+const APP_VERSION = '1.2.9';
+const APP_BUILD_DATE = '2026-09-20'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -576,6 +576,29 @@ const APP_BUILD_DATE = '2026-09-18'; // ISO format
   </div>
 
   <div class="card">
+    <h2 id="advancedCardTitle">⚙️ Zaawansowane</h2>
+    <button class="secondary-btn" id="advancedShowBtn">Pokaż opcje zaawansowane</button>
+    <div class="hidden" id="advancedWrap">
+      <div style="margin-top:14px;">
+        <div class="lb" id="advCarSizeLabel">Próg minimalnego rozmiaru postaci (liczba pól)</div>
+        <p class="hint" id="advCarSizeHint">Od tylu pól w górę postać na wodzie/śwince/dinozaurze przestaje się zmniejszać. Domyślnie 100.</p>
+        <div class="tile-count-row">
+          <input type="range" id="advCarSizeRange" min="10" max="100" step="5" value="100">
+          <input type="number" id="advCarSizeNum" class="tile-count-num" min="10" max="100" value="100">
+        </div>
+      </div>
+      <div style="margin-top:18px;">
+        <div class="lb" id="advMapZoomLabel">Przybliżenie mapy w trybie kompasu</div>
+        <p class="hint" id="advMapZoomHint">Jak bardzo mapa przybliża się do pojazdu, gdy włączysz podążanie za nim. Domyślnie 17.</p>
+        <div class="tile-count-row">
+          <input type="range" id="advMapZoomRange" min="10" max="19" step="1" value="17">
+          <input type="number" id="advMapZoomNum" class="tile-count-num" min="10" max="19" value="17">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2 id="diagCardTitle">🛠️ Diagnostyka</h2>
     <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
     <div class="hidden" id="diagLogWrap">
@@ -722,6 +745,12 @@ const I18N = {
     tileCardHint:'Od 10 (krótka gra) do 300 (długa trasa). Domyślnie 100.',
     straightLineLabel:'📏 Zawsze linia prosta',
     straightLineSub:'Nie licz realnej trasy drogowej, nawet gdy internet działa. Przyda się też do śledzenia lotu samolotem.',
+    advancedCardTitle:'⚙️ Zaawansowane',
+    advancedShowBtn:'Pokaż opcje zaawansowane',
+    advCarSizeLabel:'Próg minimalnego rozmiaru postaci (liczba pól)',
+    advCarSizeHint:'Od tylu pól w górę postać na wodzie/śwince/dinozaurze przestaje się zmniejszać. Domyślnie 100.',
+    advMapZoomLabel:'Przybliżenie mapy w trybie kompasu',
+    advMapZoomHint:'Jak bardzo mapa przybliża się do pojazdu, gdy włączysz podążanie za nim. Domyślnie 17.',
     diagCardTitle:'🛠️ Diagnostyka',
     aboutCardTitle:'ℹ️ O appce',
     aboutBlurb:'TripDot powstał, żeby odpowiedzieć na pytanie "daleko jeszcze?" i ułatwić rodzinne podróże samochodem, samolotem czy nawet piesze (w górach - tryb linii prostej do celu).',
@@ -820,6 +849,12 @@ const I18N = {
     tileCardHint:'From 10 (short game) to 300 (long route). Default is 100.',
     straightLineLabel:'📏 Always straight line',
     straightLineSub:"Don't calculate the real road route, even when the internet works. Also handy for tracking a flight.",
+    advancedCardTitle:'⚙️ Advanced',
+    advancedShowBtn:'Show advanced options',
+    advCarSizeLabel:'Minimum character size threshold (tile count)',
+    advCarSizeHint:'At this tile count and above, the character on water/piggy/dino stops shrinking further. Default 100.',
+    advMapZoomLabel:'Map zoom in compass mode',
+    advMapZoomHint:'How close the map zooms in on the vehicle once you turn on following it. Default 17.',
     diagCardTitle:'🛠️ Diagnostics',
     aboutCardTitle:'ℹ️ About',
     aboutBlurb:'TripDot was created to answer the question "are we there yet?" and make family trips easier — by car, by plane, or even on foot (in the mountains — straight-line-to-destination mode).',
@@ -917,7 +952,40 @@ function detectDefaultLang(){
     return langs.some(l => l.toLowerCase().startsWith('pl')) ? 'pl' : 'en';
   } catch(e){ return 'en'; }
 }
-let settings = { theme:'road', tileCount:100, forceStraightLine:false, lang: detectDefaultLang() };
+// persisted independently of any trip (unlike saveTripState, which only
+// exists while a trip is active/paused) — these are just the person's
+// standing app preferences, so they should survive every relaunch, trip
+// or no trip. carSizeRefCount/mapFollowZoom are the two knobs exposed
+// under Options → Advanced.
+const APP_SETTINGS_KEY = 'tripdot_app_settings_v1';
+function loadAppSettings(){
+  try{
+    const raw = localStorage.getItem(APP_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){ return null; }
+}
+function saveAppSettings(){
+  try{
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify({
+      lang: settings.lang,
+      carSizeRefCount: settings.carSizeRefCount,
+      mapFollowZoom: settings.mapFollowZoom
+    }));
+  } catch(e){ /* storage unavailable — ignore */ }
+}
+const savedAppSettings = loadAppSettings();
+let settings = {
+  theme:'road', tileCount:100, forceStraightLine:false,
+  lang: (savedAppSettings && (savedAppSettings.lang === 'pl' || savedAppSettings.lang === 'en')) ? savedAppSettings.lang : detectDefaultLang(),
+  // tile-count threshold at/above which the wave/zigzag character size is
+  // pinned at its minimum (see CAR_SIZE_REF_COUNT in renderProgress) —
+  // adjustable in Options → Advanced, from the tile-count slider's own
+  // minimum (10) up to the original hardcoded default (100)
+  carSizeRefCount: (savedAppSettings && Number.isFinite(savedAppSettings.carSizeRefCount)) ? savedAppSettings.carSizeRefCount : 100,
+  // map zoom level while following the vehicle (compass/track-up mode) —
+  // see MAP_FOLLOW_ZOOM
+  mapFollowZoom: (savedAppSettings && Number.isFinite(savedAppSettings.mapFollowZoom)) ? savedAppSettings.mapFollowZoom : 17
+};
 
 function t(key){ return I18N[settings.lang][key]; }
 function themeInfo(id){ return { ...THEME_STYLE[id], ...I18N[settings.lang].themes[id] }; }
@@ -1114,7 +1182,17 @@ let routePoints = null;
 let completedRoutePoints = [];
 let routeCumDist = null;
 let usingRoute = false;
-let progressBase = 0; // % locked in at the last route recalculation — never goes down
+// ---- progress model ----
+// fraction = traveledKm / (traveledKm + currentRemainingKm). traveledKm is a
+// real, GPS-measured odometer (see updateHeadingAndOdometer) that only ever
+// grows with real movement, regardless of route recalculations or mode
+// switches — so unlike the old progressBase/maxProgress "never go down"
+// scheme, a genuine detour (circling to land from the other side, a missed
+// exit) is reflected honestly: the percentage can dip a little while you're
+// genuinely farther from the destination, then climb again as you close
+// the distance, instead of freezing solid for the whole detour.
+let traveledKm = 0;
+let currentRemainingKm = 0; // live remaining distance, for the km display
 let arrivalCelebrated = false; // guards the one-shot confetti/spin so it doesn't replay on every GPS tick
 let maxProgress = 0;
 let boardTileCount = 100; // real number of route tiles on screen, incl. turn tiles
@@ -1289,7 +1367,7 @@ function saveTripState(){
       destLat, destLng, destName,
       startLat, startLng,
       totalDistance, originalTotalDistance, usingRoute, routePoints, routeCumDist, completedRoutePoints,
-      maxProgress, progressBase,
+      maxProgress, traveledKm, currentRemainingKm,
       theme:settings.theme, tileCount:settings.tileCount,
       forceStraightLine:settings.forceStraightLine, lang:settings.lang,
       savedAt: Date.now()
@@ -1337,12 +1415,13 @@ function checkForSavedTrip(){
     routeCumDist = saved.routeCumDist || null;
     completedRoutePoints = saved.completedRoutePoints || [];
     maxProgress = saved.maxProgress || 0;
-    progressBase = saved.progressBase || 0;
+    traveledKm = saved.traveledKm || 0;
+    currentRemainingKm = (saved.currentRemainingKm !== undefined) ? saved.currentRemainingKm : (saved.totalDistance || 0);
 
     routeMeta.segments = null;
     if(usingRoute && routePoints) buildSegmentMeta();
     gpsState = {
-      lastAcceptedIndex: indexForProgress(maxProgress),
+      lastAcceptedIndex: indexForProgress(traveledKm),
       lastAcceptedProgress: maxProgress,
       lastPosition: null, lastTimestamp: 0, pendingJump: null,
       lastRawPosition: null, lastRawTimestamp: 0, lastHeading: null
@@ -1808,8 +1887,8 @@ function renderProgress(fraction){
   // CAR_SCALE_WAVE alone to resize just the character, path stays untouched.
   const CAR_SCALE_WAVE = 1.8;
   // the character stops growing smaller once tileCount reaches this value —
-  // 100 to 300 tiles all show the same character size, matching size at 100
-  const CAR_SIZE_REF_COUNT = 30;
+  // adjustable in Options → Advanced (settings.carSizeRefCount), default 100
+  const CAR_SIZE_REF_COUNT = settings.carSizeRefCount || 100;
   const carMinSize = Math.floor(160 / Math.sqrt(100)); // fallback reference: size at 100 tiles
   const fallbackCarSize = Math.max(carMinSize, Math.floor(160 / Math.sqrt(count)));
   let carSize;
@@ -1883,11 +1962,7 @@ function renderProgress(fraction){
   $('progressFill').style.width = (fraction*100) + '%';
   $('statPercent').textContent = displayPercent + '%';
 
-  // totalDistance reflects only the current (possibly recalculated) route
-  // segment, so km-remaining must use the sub-fraction within that segment,
-  // not the overall blended fraction
-  const subFraction = clamp((fraction - progressBase) / Math.max(1e-6, 1 - progressBase), 0, 1);
-  const remainingKm = totalDistance * (1 - subFraction);
+  const remainingKm = Math.max(0, currentRemainingKm);
   $('statKm').textContent = remainingKm < 10 ? remainingKm.toFixed(1) : Math.round(remainingKm);
 
   const msgEl = $('progressMsg');
@@ -2026,14 +2101,16 @@ function currentHeading(){
   return 0;
 }
 
-// Updates gpsState.lastHeading from two consecutive raw GPS fixes. This
-// used to live inline inside projectGpsToRoute(), which is only ever
-// called when usingRoute is true — meaning in straight-line mode (e.g. the
-// hiking/flight-tracking case) the heading NEVER updated, no matter how
+// Updates gpsState.lastHeading and traveledKm from two consecutive raw GPS
+// fixes. This used to live inline inside projectGpsToRoute(), which is only
+// ever called when usingRoute is true — meaning in straight-line mode (e.g.
+// the hiking/flight-tracking case) the heading NEVER updated, no matter how
 // much you actually moved: currentHeading() stayed stuck at its 0°
 // fallback forever, and track-up mode/vehicle mirroring silently never
-// worked. This must run unconditionally, regardless of routing mode.
-function updateHeadingFromRawGps(lat, lng){
+// worked. This must run unconditionally, regardless of routing mode —
+// same reasoning now applies to the odometer (traveledKm), which the new
+// progress formula (see acceptProgressFromGps) needs regardless of mode too.
+function updateHeadingAndOdometer(lat, lng){
   if(!gpsState.lastRawPosition || !gpsState.lastRawTimestamp) return;
   const move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
   const gpsBearing = bearing(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
@@ -2041,6 +2118,9 @@ function updateHeadingFromRawGps(lat, lng){
   // distance — GPS noise while stationary or crawling can otherwise spin
   // the heading wildly with no actual direction change to justify it
   if(gpsBearing !== null && move > 0.005) gpsState.lastHeading = gpsBearing;
+  // same noise floor for the odometer — otherwise GPS jitter while parked
+  // slowly inflates "distance traveled" even though nothing is moving
+  if(move > 0.003) traveledKm += move;
 }
 
 function projectGpsToRoute(lat, lng, accuracy){
@@ -2058,9 +2138,9 @@ function projectGpsToRoute(lat, lng, accuracy){
   const end = fullSearch ? (routeMeta.segments.length - 1) : Math.min(routeMeta.segments.length - 1, gpsState.lastAcceptedIndex + 100);
   let best = null;
   // move/gpsBearing here are purely for THIS function's own off-route/
-  // wrong-way detection below — gpsState.lastHeading itself is now updated
-  // separately by updateHeadingFromRawGps(), unconditionally, regardless of
-  // whether a real route is even in use (see that function's comment)
+  // wrong-way detection below — gpsState.lastHeading (and traveledKm) are
+  // now updated separately by updateHeadingAndOdometer(), unconditionally,
+  // regardless of whether a real route is even in use (see its comment)
   let move = 0, gpsBearing = null;
   if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
     move = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
@@ -2101,17 +2181,17 @@ function projectGpsToRoute(lat, lng, accuracy){
   return best;
 }
 
-// finds the route-point index closest to a given progress fraction —
-// used to seed gpsState when resuming a saved trip or starting fresh
-function indexForProgress(fraction){
+// finds the route-point index closest to a given along-route distance —
+// used to seed gpsState when resuming a saved trip. traveledKm is a real
+// odometer reading, which for ordinary (non-detoured) driving tracks
+// closely with distance-along-the-route, making it a good seed for the
+// route-matching search window; it self-corrects on the next real fix
+// either way.
+function indexForProgress(km){
   if(!usingRoute || !routeCumDist) return 0;
-  // totalDistance covers only the current route segment (see progressBase),
-  // so convert the overall fraction into a sub-fraction within it first
-  const subFraction = clamp((fraction - progressBase) / Math.max(1e-6, 1 - progressBase), 0, 1);
-  const targetKm = subFraction * totalDistance;
   let idx = 0;
   for(let i = 0; i < routeCumDist.length; i++){
-    if(routeCumDist[i] >= targetKm) { idx = i; break; }
+    if(routeCumDist[i] >= km) { idx = i; break; }
     idx = i;
   }
   return idx;
@@ -2136,12 +2216,42 @@ function acceptProgressFromGps(pos){
   if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
   const now = performance.now();
 
-  // updateHeadingFromRawGps needs the PREVIOUS raw fix, so it must run
+  // Sanity-check the raw movement itself before trusting it for anything —
+  // this replaces the old approach of rejecting a computed *fraction* that
+  // jumped implausibly, which conflated "is this GPS noise" with "did
+  // progress decrease" (two different questions) and froze the whole
+  // display solid during a genuine detour. Checking raw speed directly
+  // catches actual GPS teleports just as well, without needing progress
+  // itself to ever be treated with suspicion.
+  if(gpsState.lastRawPosition && gpsState.lastRawTimestamp){
+    const moveKm = haversine(gpsState.lastRawPosition.lat, gpsState.lastRawPosition.lng, lat, lng);
+    const elapsedSec = Math.max(0.5, (now - gpsState.lastRawTimestamp) / 1000);
+    // ~1000 km/h ceiling — generous enough to cover flight-tracking (the
+    // main reason straight-line mode exists), while still catching actual
+    // GPS teleports (a bad fix landing hundreds of km away in one tick)
+    const maxPlausibleSpeedKmPerSec = 0.28;
+    if(moveKm / elapsedSec > maxPlausibleSpeedKmPerSec){
+      const confirmed = gpsState.pendingJump
+        && haversine(gpsState.pendingJump.lat, gpsState.pendingJump.lng, lat, lng) < 0.2;
+      if(confirmed){
+        gpsState.pendingJump = null; // confirmed by a second, similar reading — probably real (e.g. tunnel exit, or a flight's sparse GPS updates)
+      } else {
+        logTripEvent('jump_rejected', {lat, lng, moveKm:+moveKm.toFixed(2), elapsedSec:+elapsedSec.toFixed(1)});
+        gpsState.pendingJump = {lat, lng, at:now};
+        setBoardStatus(t('gpsWeak'), false);
+        return;
+      }
+    } else {
+      gpsState.pendingJump = null;
+    }
+  }
+
+  // updateHeadingAndOdometer needs the PREVIOUS raw fix, so it must run
   // (like projectGpsToRoute) before lastRawPosition/lastRawTimestamp below
   // advance to this fix. Unconditional regardless of usingRoute — straight-
-  // line mode (hiking/flight-tracking) needs a live heading too, for its
-  // own track-up/vehicle-mirroring, just as much as real-route mode does.
-  updateHeadingFromRawGps(lat, lng);
+  // line mode (hiking/flight-tracking) needs a live heading and odometer
+  // just as much as real-route mode does.
+  updateHeadingAndOdometer(lat, lng);
   // projectGpsToRoute needs the PREVIOUS raw fix (to compute heading), so
   // read the match first — then advance lastRawPosition/lastRawTimestamp
   // to this fix. This must happen unconditionally, before any early
@@ -2151,14 +2261,11 @@ function acceptProgressFromGps(pos){
   const match = usingRoute ? projectGpsToRoute(lat, lng, accuracy) : null;
   gpsState.lastRawPosition = {lat, lng};
   gpsState.lastRawTimestamp = now;
-  let fraction, matchedIndex = 0;
+  let remainingKm, matchedIndex = 0;
   const isRouteTracking = !!(usingRoute && match);
 
   if(isRouteTracking){
-    // blend: progressBase is locked in from any earlier recalculation and
-    // never goes down; the remaining (1-progressBase) share fills in from
-    // progress along the current (possibly recalculated) route segment
-    fraction = progressBase + (1 - progressBase) * (match.alongKm / totalDistance);
+    remainingKm = Math.max(0, totalDistance - match.alongKm);
     matchedIndex = match.index;
     const offRouteThreshold = Math.max(0.12, accuracy/1000*4);
     if(match.distanceKm > offRouteThreshold || match.headingMismatch){
@@ -2178,14 +2285,20 @@ function acceptProgressFromGps(pos){
     // GPS doesn't land anywhere near the route. Try periodically to (re)get
     // a real route from here (e.g. connectivity came back).
     maybeRefreshRoute(lat, lng, now);
-    // straight-line mode: totalDistance is the distance from wherever this
-    // mode started (trip start, or a mid-trip fallback) to the destination;
-    // progressBase (usually 0 here, but not always — see the mid-trip
-    // recalculation fallback) blends it in the same way as route mode
-    const remaining = haversine(lat, lng, destLat, destLng);
-    fraction = progressBase + (1 - progressBase) * ((totalDistance - remaining) / totalDistance);
+    remainingKm = haversine(lat, lng, destLat, destLng);
   }
+
+  // the actual progress formula: real distance covered so far, against
+  // covered-so-far PLUS whatever is left right now. This is what makes a
+  // genuine detour (circling to land from the other side, a missed exit)
+  // show up honestly — remainingKm can grow when you're truly farther
+  // away, and the percentage dips a little instead of freezing solid —
+  // and it naturally reaches exactly 100% the moment remainingKm hits 0,
+  // regardless of how convoluted the path there was.
+  const progressDenominator = traveledKm + remainingKm;
+  let fraction = progressDenominator > 0.001 ? traveledKm / progressDenominator : 0;
   fraction = clamp(fraction, 0, 1);
+  currentRemainingKm = remainingKm;
 
   // don't let a single noisy fix near the end declare arrival — only jump
   // to 100% once we're also physically close to the destination point.
@@ -2206,51 +2319,18 @@ function acceptProgressFromGps(pos){
     }
   }
 
-  // reject GPS jumps that are physically implausible in the elapsed time,
-  // unless the same jump repeats (then it's probably real, e.g. a tunnel exit)
-  const jump = fraction - gpsState.lastAcceptedProgress;
-  const elapsed = Math.max(0.5, (now - gpsState.lastTimestamp) / 1000);
-  // how big a jump in *trip fraction* is plausible given how much time has
-  // passed: a generous max speed times elapsed seconds, expressed as a
-  // share of the whole trip. Route-tracking mode only ever means a road
-  // vehicle, so it keeps a tighter ~200 km/h ceiling (still generous, but
-  // tight enough to catch real GPS glitches); straight-line mode can also
-  // be used to track a flight, so it gets a much higher ~1000 km/h ceiling.
-  // This scales UP with elapsed time — the longer the gap (e.g. the
-  // app was backgrounded/minimized for a while), the more distance is
-  // plausible, so the allowance must grow, not shrink. It previously
-  // divided by elapsed instead, which meant a long background pause
-  // produced a near-zero allowance and permanently rejected the correct
-  // progress jump on resuming, leaving the board stuck at its old position
-  // indefinitely.
-  const maxPlausibleSpeedKmPerSec = isRouteTracking ? 0.056 : 0.28;
-  const maxReasonableJump = Math.max(0.025, Math.min(1, (maxPlausibleSpeedKmPerSec * elapsed) / Math.max(0.1, totalDistance)));
-
-  if(jump > maxReasonableJump && gpsState.lastAcceptedProgress < 0.95){
-    if(gpsState.pendingJump && Math.abs(gpsState.pendingJump.fraction - fraction) < 0.04){
-      gpsState.pendingJump = null; // confirmed by a second, similar reading — accept below
-    } else {
-      logTripEvent('jump_rejected', {fraction: +fraction.toFixed(4), lastAccepted: +gpsState.lastAcceptedProgress.toFixed(4), elapsedSec: +elapsed.toFixed(1), maxReasonableJump: +maxReasonableJump.toFixed(4), isRouteTracking});
-      gpsState.pendingJump = {fraction, index:matchedIndex, at:now};
-      setBoardStatus(t('gpsWeak'), false);
-      return;
-    }
-  }
-
-  if(fraction >= gpsState.lastAcceptedProgress){
-    maxProgress = Math.max(maxProgress, fraction);
-    gpsState.lastAcceptedProgress = maxProgress;
-    gpsState.lastAcceptedIndex = Math.max(gpsState.lastAcceptedIndex, matchedIndex);
-    gpsState.lastPosition = {lat, lng};
-    gpsState.lastTimestamp = now;
-    renderProgress(maxProgress);
-    saveTripState();
-    setBoardStatus('', false);
-    if(Math.round(maxProgress*100) >= 100){
-      stopTracking();
-      releaseWakeLock();
-      clearTripState();
-    }
+  maxProgress = fraction;
+  gpsState.lastAcceptedProgress = maxProgress;
+  gpsState.lastAcceptedIndex = Math.max(gpsState.lastAcceptedIndex, matchedIndex);
+  gpsState.lastPosition = {lat, lng};
+  gpsState.lastTimestamp = now;
+  renderProgress(maxProgress);
+  saveTripState();
+  setBoardStatus('', false);
+  if(Math.round(maxProgress*100) >= 100){
+    stopTracking();
+    releaseWakeLock();
+    clearTripState();
   }
 }
 
@@ -2303,23 +2383,12 @@ function updateRouteModeIcon(){
 async function recalcRouteFromCurrentPosition(lat, lng){
   try{
     const newRoute = await fetchRoute(lat, lng, destLat, destLng);
-    // maxProgress can be badly stale (e.g. after a long background pause —
-    // real travel happened while GPS updates were paused, so maxProgress
-    // still reflects wherever we were BEFORE that gap). Blindly locking
-    // progressBase to the stale maxProgress would leave the board stuck
-    // showing the old position forever, only creeping forward from there
-    // as driving continues on the freshly recalculated route. Instead,
-    // derive progress from the real remaining distance just measured
-    // (newRoute.totalKm, from current position to destination) against the
-    // fixed original trip distance — this self-corrects to the true
-    // position regardless of how long we were out of sync. Never rewind:
-    // take whichever of the two is further along.
-    const distanceBasedProgress = originalTotalDistance > 0.01
-      ? clamp(1 - (newRoute.totalKm / originalTotalDistance), 0, 1)
-      : maxProgress;
-    progressBase = Math.max(maxProgress, distanceBasedProgress);
-    maxProgress = progressBase;
-    gpsState.lastAcceptedProgress = maxProgress;
+    // no more progressBase/Math.max dance needed here — traveledKm (the
+    // real GPS odometer) already carries forward correctly across a route
+    // change on its own, since it's measured independently of route
+    // geometry. The next GPS tick computes fraction fresh from
+    // traveledKm/(traveledKm+remaining) using this new route's numbers.
+    currentRemainingKm = newRoute.totalKm;
     // keep the geometry already driven on the OLD route before it gets
     // replaced — otherwise the map would lose all trace of everything
     // covered before this recalculation, showing only the new remaining
@@ -2339,19 +2408,14 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     updateRouteModeIcon();
     saveTripState();
     renderProgress(maxProgress);
-    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length, progressBase: +progressBase.toFixed(3)});
+    logTripEvent('recalc_success', {lat, lng, totalKm: +newRoute.totalKm.toFixed(2), points: newRoute.points.length, traveledKm: +traveledKm.toFixed(3)});
   } catch(e){
     // no route (e.g. offline) — don't get stuck waiting forever on a route
     // that no longer matches; fall back to straight-line distance from here
     console.warn('Route recalculation failed, switching to straight-line distance:', e);
     logTripEvent('recalc_failed', {lat, lng, mapboxError: e && e.mapboxError, osrmError: e && e.osrmError, message: e && e.message});
     const remainingKm = haversine(lat, lng, destLat, destLng);
-    const distanceBasedProgress = originalTotalDistance > 0.01
-      ? clamp(1 - (remainingKm / originalTotalDistance), 0, 1)
-      : maxProgress;
-    progressBase = Math.max(maxProgress, distanceBasedProgress);
-    maxProgress = progressBase;
-    gpsState.lastAcceptedProgress = maxProgress;
+    currentRemainingKm = remainingKm;
     if(usingRoute && routePoints && routePoints.length > 1){
       const oldIdx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 1);
       completedRoutePoints = completedRoutePoints.concat(routePoints.slice(0, oldIdx + 1));
@@ -2771,7 +2835,7 @@ $('startBtn').addEventListener('click', async () => {
   completedRoutePoints = [];
   usingRoute = false;
   routeMeta.segments = null;
-  progressBase = 0;
+  traveledKm = 0;
   arrivalCelebrated = false;
   routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
   resetTripLog();
@@ -2800,6 +2864,7 @@ $('startBtn').addEventListener('click', async () => {
   // gets recalculated mid-trip, since totalDistance itself is overwritten
   // on every recalculation to reflect only the remaining segment
   originalTotalDistance = totalDistance;
+  currentRemainingKm = totalDistance;
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0, lastHeading:null};
 
   if(totalDistance < 0.05){
@@ -2880,7 +2945,7 @@ let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapC
     mapFollowActive = false,
     mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
     mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
-const MAP_FOLLOW_ZOOM = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving)
+const MAP_FOLLOW_ZOOM_DEFAULT = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving) — adjustable in Options → Advanced, see settings.mapFollowZoom
 // safety margin on top of the exact minimum oversize needed (see
 // resizeRotatedMapCanvas) — 1.0 would be the mathematical minimum, a hair
 // more avoids razor-thin edge cases from sub-pixel rounding
@@ -3063,7 +3128,7 @@ function renderRouteMap(fitBounds){
   const curLatLng = [currentPos.lat, currentPos.lng];
 
   let donePoints, todoPoints;
-  const hasProgress = maxProgress > 0 || completedRoutePoints.length > 0;
+  const hasProgress = traveledKm > 0 || completedRoutePoints.length > 0;
   if(usingRoute && routePoints && routePoints.length > 1){
     // split the route geometry at the segment we last matched to, so the
     // covered part can be drawn in a different colour from what's left.
@@ -3119,7 +3184,7 @@ function updateRouteMapLineSplit(){
   if(!currentPos) return;
   const curLatLng = [currentPos.lat, currentPos.lng];
   let donePoints, todoPoints;
-  const hasProgress = maxProgress > 0 || completedRoutePoints.length > 0;
+  const hasProgress = traveledKm > 0 || completedRoutePoints.length > 0;
   if(usingRoute && routePoints && routePoints.length > 1){
     const idx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 2);
     donePoints = hasProgress
@@ -3179,7 +3244,7 @@ function updateRouteMapCarPosition(){
   const heading = currentHeading();
   applyMapRotationAngle(mapTrackUpMode ? -heading : 0);
   if(mapFollowActive){
-    routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
+    routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
   }
 }
 
@@ -3204,7 +3269,7 @@ function applyBoardViewMode(){
       renderRouteMap(!mapFollowActive);
       if(mapFollowActive){
         const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-        if(pos) routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:false });
+        if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:false });
       }
     }, 0);
   }
@@ -3263,7 +3328,7 @@ $('routeMapFollowBtn').addEventListener('click', () => {
   setTrackUpMode(true);
   if(routeMap){
     const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-    if(pos) routeMap.setView([pos.lat, pos.lng], MAP_FOLLOW_ZOOM, { animate:true });
+    if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
   }
 });
 
@@ -3335,7 +3400,8 @@ $('resetBtn').addEventListener('click', async () => {
   completedRoutePoints = [];
   usingRoute = false;
   routeMeta.segments = null;
-  progressBase = 0;
+  traveledKm = 0;
+  currentRemainingKm = 0;
   arrivalCelebrated = false;
   dismissConfetti();
   routeRecalc = {pending:false, lastFetchAt: performance.now(), lastFetchPos:null};
@@ -3426,6 +3492,12 @@ function applyStaticTexts(){
   $('tileCardHint').textContent = t('tileCardHint');
   $('straightLineLabel').textContent = t('straightLineLabel');
   $('straightLineSub').textContent = t('straightLineSub');
+  $('advancedCardTitle').textContent = t('advancedCardTitle');
+  $('advCarSizeLabel').textContent = t('advCarSizeLabel');
+  $('advCarSizeHint').textContent = t('advCarSizeHint');
+  $('advMapZoomLabel').textContent = t('advMapZoomLabel');
+  $('advMapZoomHint').textContent = t('advMapZoomHint');
+  $('advancedShowBtn').textContent = $('advancedWrap').classList.contains('hidden') ? t('advancedShowBtn') : t('advancedShowBtn') + ' ▲';
   $('diagCardTitle').textContent = t('diagCardTitle');
   $('aboutCardTitle').textContent = t('aboutCardTitle');
   $('aboutBlurb').textContent = t('aboutBlurb');
@@ -3455,6 +3527,7 @@ function setLang(lang){
   settings.lang = lang;
   document.documentElement.lang = lang;
   applyStaticTexts();
+  saveAppSettings();
 }
 
 function openOptions(){
@@ -3464,6 +3537,17 @@ function openOptions(){
   $('tileCountRange').value = settings.tileCount;
   $('tileCountNum').value = settings.tileCount;
   $('forceStraightToggle').checked = settings.forceStraightLine;
+  // keep the character-size threshold's lower bound in sync with the tile
+  // count slider's own minimum, in case that ever changes
+  const tileMin = $('tileCountRange').min || 10;
+  $('advCarSizeRange').min = tileMin;
+  $('advCarSizeNum').min = tileMin;
+  $('advCarSizeRange').value = settings.carSizeRefCount;
+  $('advCarSizeNum').value = settings.carSizeRefCount;
+  $('advMapZoomRange').value = settings.mapFollowZoom;
+  $('advMapZoomNum').value = settings.mapFollowZoom;
+  $('advancedWrap').classList.add('hidden');
+  $('advancedShowBtn').textContent = t('advancedShowBtn');
   $('diagLogWrap').classList.add('hidden');
   $('diagShowBtn').textContent = t('diagShowBtn');
 }
@@ -3498,6 +3582,43 @@ $('tileCountNum').addEventListener('change', () => {
 $('forceStraightToggle').addEventListener('change', () => {
   settings.forceStraightLine = $('forceStraightToggle').checked;
   updateThemePreview();
+});
+
+$('advancedShowBtn').addEventListener('click', () => {
+  const wrap = $('advancedWrap');
+  const willShow = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', !willShow);
+  $('advancedShowBtn').textContent = willShow ? t('advancedShowBtn') + ' ▲' : t('advancedShowBtn');
+});
+$('advCarSizeRange').addEventListener('input', () => {
+  settings.carSizeRefCount = parseInt($('advCarSizeRange').value, 10);
+  $('advCarSizeNum').value = settings.carSizeRefCount;
+  saveAppSettings();
+});
+$('advCarSizeNum').addEventListener('change', () => {
+  const min = parseInt($('advCarSizeRange').min, 10) || 10;
+  const max = parseInt($('advCarSizeRange').max, 10) || 100;
+  let v = parseInt($('advCarSizeNum').value, 10);
+  if(isNaN(v)) v = 100;
+  v = Math.max(min, Math.min(max, v));
+  settings.carSizeRefCount = v;
+  $('advCarSizeNum').value = v;
+  $('advCarSizeRange').value = v;
+  saveAppSettings();
+});
+$('advMapZoomRange').addEventListener('input', () => {
+  settings.mapFollowZoom = parseInt($('advMapZoomRange').value, 10);
+  $('advMapZoomNum').value = settings.mapFollowZoom;
+  saveAppSettings();
+});
+$('advMapZoomNum').addEventListener('change', () => {
+  let v = parseInt($('advMapZoomNum').value, 10);
+  if(isNaN(v)) v = MAP_FOLLOW_ZOOM_DEFAULT;
+  v = Math.max(10, Math.min(19, v));
+  settings.mapFollowZoom = v;
+  $('advMapZoomNum').value = v;
+  $('advMapZoomRange').value = v;
+  saveAppSettings();
 });
 
 $('diagShowBtn').addEventListener('click', () => {
