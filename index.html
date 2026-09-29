@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.10';
-const APP_BUILD_DATE = '2026-09-29'; // ISO format
+const APP_VERSION = '1.2.9';
+const APP_BUILD_DATE = '2026-09-20'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -546,7 +546,8 @@ const APP_BUILD_DATE = '2026-09-29'; // ISO format
 
   <div class="card">
     <h2 id="customThemeCardTitle">🧪 Motyw Custom (AI) — eksperymentalne</h2>
-    <p class="hint" id="customThemeHint">Opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz API Gemini ustawisz w opcjach zaawansowanych.</p>
+    <p class="hint" id="customThemeHint">Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).</p>
+    <input type="text" id="customThemeApiKey" class="masked-input" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <input type="text" id="customThemePrompt" placeholder="np. jednorożce, kosmos, żaby..." style="margin-top:8px;">
     <button class="secondary-btn" id="customThemeGenerateBtn" style="margin-top:8px;">✨ Generuj motyw</button>
     <p class="hint" id="customThemeStatus" style="min-height:16px;"></p>
@@ -594,21 +595,17 @@ const APP_BUILD_DATE = '2026-09-29'; // ISO format
           <input type="number" id="advMapZoomNum" class="tile-count-num" min="10" max="19" value="17">
         </div>
       </div>
-      <div style="margin-top:18px;">
-        <label for="customThemeApiKey" id="advApiKeyLabel">Klucz API Google AI Studio (Gemini)</label>
-        <p class="hint" id="advApiKeyHint">Darmowy klucz — tylko do testów, zapisywany wyłącznie na tym urządzeniu. Zdobędziesz go na aistudio.google.com (konto Google, bez karty).</p>
-        <input type="text" id="customThemeApiKey" class="masked-input" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      </div>
-      <div style="margin-top:18px;">
-        <h2 id="diagCardTitle" style="font-size:15px;">🛠️ Diagnostyka</h2>
-        <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
-        <div class="hidden" id="diagLogWrap">
-          <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
-          <div class="diag-log-row">
-            <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
-            <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
-          </div>
-        </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="diagCardTitle">🛠️ Diagnostyka</h2>
+    <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
+    <div class="hidden" id="diagLogWrap">
+      <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
+      <div class="diag-log-row">
+        <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
+        <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
       </div>
     </div>
   </div>
@@ -733,7 +730,7 @@ const I18N = {
     themeCardTitle:'🎨 Motyw planszy',
     themeCardHint:'Każdy motyw ma inny kształt trasy i inne postacie.',
     customThemeCardTitle:'🧪 Motyw Custom (AI) — eksperymentalne',
-    customThemeHint:'Opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz API Gemini ustawisz w opcjach zaawansowanych.',
+    customThemeHint:'Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).',
     customThemeApiKeyPlaceholder:'Klucz API Google AI Studio (Gemini)',
     customThemePromptPlaceholder:'np. jednorożce, kosmos, żaby...',
     customThemeGenerateBtn:'✨ Generuj motyw',
@@ -752,8 +749,6 @@ const I18N = {
     advancedShowBtn:'Pokaż opcje zaawansowane',
     advCarSizeLabel:'Próg minimalnego rozmiaru postaci (liczba pól)',
     advCarSizeHint:'Od tylu pól w górę postać na wodzie/śwince/dinozaurze przestaje się zmniejszać. Domyślnie 100.',
-    advApiKeyLabel:'Klucz API Google AI Studio (Gemini)',
-    advApiKeyHint:'Darmowy klucz — tylko do testów, zapisywany wyłącznie na tym urządzeniu. Zdobędziesz go na aistudio.google.com (konto Google, bez karty).',
     advMapZoomLabel:'Przybliżenie mapy w trybie kompasu',
     advMapZoomHint:'Jak bardzo mapa przybliża się do pojazdu, gdy włączysz podążanie za nim. Domyślnie 17.',
     diagCardTitle:'🛠️ Diagnostyka',
@@ -839,7 +834,7 @@ const I18N = {
     themeCardTitle:'🎨 Board theme',
     themeCardHint:'Each theme has a different track shape and characters.',
     customThemeCardTitle:'🧪 Custom AI theme — experimental',
-    customThemeHint:'Describe the theme you want AI to generate, e.g. "unicorns", "space", "frogs". Set your Gemini API key in Advanced options.',
+    customThemeHint:'Enter a free Google AI Studio (Gemini) API key (testing only, stored only on this device) and describe the theme you want AI to generate, e.g. "unicorns", "space", "frogs". Get a key at aistudio.google.com (Google account, no card).',
     customThemeApiKeyPlaceholder:'Google AI Studio (Gemini) API key',
     customThemePromptPlaceholder:'e.g. unicorns, space, frogs...',
     customThemeGenerateBtn:'✨ Generate theme',
@@ -858,8 +853,6 @@ const I18N = {
     advancedShowBtn:'Show advanced options',
     advCarSizeLabel:'Minimum character size threshold (tile count)',
     advCarSizeHint:'At this tile count and above, the character on water/piggy/dino stops shrinking further. Default 100.',
-    advApiKeyLabel:'Google AI Studio (Gemini) API key',
-    advApiKeyHint:'Free key — testing only, stored only on this device. Get one at aistudio.google.com (Google account, no card).',
     advMapZoomLabel:'Map zoom in compass mode',
     advMapZoomHint:'How close the map zooms in on the vehicle once you turn on following it. Default 17.',
     diagCardTitle:'🛠️ Diagnostics',
@@ -1021,10 +1014,6 @@ function loadCustomThemeFromStorage(){
     if(!raw) return;
     const saved = JSON.parse(raw);
     if(!saved || !saved.style || !saved.pl || !saved.en) return;
-    // motywy AI generowane przed wprowadzeniem facesLeft nie mają tej flagi —
-    // dogrywamy ją tutaj, żeby stare zapisane motywy custom też korzystały
-    // z poprawionej logiki odwracania pojazdu (patrz renderProgress)
-    saved.style.facesLeft = true;
     THEME_STYLE.custom = saved.style;
     I18N.pl.themes.custom = saved.pl;
     I18N.en.themes.custom = saved.en;
@@ -1059,11 +1048,6 @@ function validateCustomThemeResponse(obj){
   for(const f of hexFields) style[f] = obj[f];
   style.vehicle = obj.vehicle; style.startIcon = obj.startIcon; style.finishIcon = obj.finishIcon;
   style.decor = decor;
-  // AI (Gemini) w zdecydowanej większości generuje postacie/ikony domyślnie
-  // patrzące w LEWO (odwrotnie niż wbudowane motywy, patrzące w prawo) —
-  // zamiast zgadywać to za każdym razem z modelu, zakładamy to na stałe dla
-  // wszystkich motywów custom i odwracamy logikę flip w renderProgress()
-  style.facesLeft = true;
   return {
     style,
     pl:{label:obj.labelPl.trim(), shape:obj.shapePl.trim()},
@@ -1951,13 +1935,7 @@ function renderProgress(fraction){
     if(prevEl){
       const prevRect = prevEl.getBoundingClientRect();
       const curRect = cur.getBoundingClientRect();
-      const movingLeft = curRect.left < prevRect.left - 5;
-      const movingRight = curRect.left > prevRect.left + 5;
-      // wbudowane motywy domyślnie patrzą w prawo (flip przy jeździe w lewo);
-      // motywy AI (theme.facesLeft) domyślnie patrzą w lewo, więc logika
-      // odwrócenia jest odwrotna — patrz validateCustomThemeResponse
-      const shouldFlip = theme.facesLeft ? movingRight : movingLeft;
-      if(shouldFlip) car.classList.add('car-flipped');
+      if(curRect.left < prevRect.left - 5) car.classList.add('car-flipped');
     }
     cur.appendChild(car);
   }
@@ -2968,13 +2946,6 @@ let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapC
     mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
     mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
 const MAP_FOLLOW_ZOOM_DEFAULT = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving) — adjustable in Options → Advanced, see settings.mapFollowZoom
-// in split view (board+map together) the map panel is roughly half the
-// screen height of fullscreen map mode, so the same zoom level shows a much
-// smaller effective area — one level lower ("-1") gives a comparable field
-// of view to what fullscreen compass mode shows at settings.mapFollowZoom
-function followZoomForView(){
-  return boardViewMode === 'split' ? Math.max(1, settings.mapFollowZoom - 1) : settings.mapFollowZoom;
-}
 // safety margin on top of the exact minimum oversize needed (see
 // resizeRotatedMapCanvas) — 1.0 would be the mathematical minimum, a hair
 // more avoids razor-thin edge cases from sub-pixel rounding
@@ -3273,7 +3244,7 @@ function updateRouteMapCarPosition(){
   const heading = currentHeading();
   applyMapRotationAngle(mapTrackUpMode ? -heading : 0);
   if(mapFollowActive){
-    routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:true });
+    routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
   }
 }
 
@@ -3298,7 +3269,7 @@ function applyBoardViewMode(){
       renderRouteMap(!mapFollowActive);
       if(mapFollowActive){
         const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-        if(pos) routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:false });
+        if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:false });
       }
     }, 0);
   }
@@ -3357,7 +3328,7 @@ $('routeMapFollowBtn').addEventListener('click', () => {
   setTrackUpMode(true);
   if(routeMap){
     const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-    if(pos) routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:true });
+    if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
   }
 });
 
@@ -3526,8 +3497,6 @@ function applyStaticTexts(){
   $('advCarSizeHint').textContent = t('advCarSizeHint');
   $('advMapZoomLabel').textContent = t('advMapZoomLabel');
   $('advMapZoomHint').textContent = t('advMapZoomHint');
-  $('advApiKeyLabel').textContent = t('advApiKeyLabel');
-  $('advApiKeyHint').textContent = t('advApiKeyHint');
   $('advancedShowBtn').textContent = $('advancedWrap').classList.contains('hidden') ? t('advancedShowBtn') : t('advancedShowBtn') + ' ▲';
   $('diagCardTitle').textContent = t('diagCardTitle');
   $('aboutCardTitle').textContent = t('aboutCardTitle');
