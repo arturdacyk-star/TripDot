@@ -5,10 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-
-// Version stable and OK
-const APP_VERSION = '1.2.9';
-const APP_BUILD_DATE = '2026-09-20'; // ISO format
+const APP_VERSION = '1.2.11';
+const APP_BUILD_DATE = '2026-09-29'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -548,8 +546,7 @@ const APP_BUILD_DATE = '2026-09-20'; // ISO format
 
   <div class="card">
     <h2 id="customThemeCardTitle">🧪 Motyw Custom (AI) — eksperymentalne</h2>
-    <p class="hint" id="customThemeHint">Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).</p>
-    <input type="text" id="customThemeApiKey" class="masked-input" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <p class="hint" id="customThemeHint">Opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz API Gemini ustawisz w opcjach zaawansowanych.</p>
     <input type="text" id="customThemePrompt" placeholder="np. jednorożce, kosmos, żaby..." style="margin-top:8px;">
     <button class="secondary-btn" id="customThemeGenerateBtn" style="margin-top:8px;">✨ Generuj motyw</button>
     <p class="hint" id="customThemeStatus" style="min-height:16px;"></p>
@@ -597,17 +594,31 @@ const APP_BUILD_DATE = '2026-09-20'; // ISO format
           <input type="number" id="advMapZoomNum" class="tile-count-num" min="10" max="19" value="17">
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2 id="diagCardTitle">🛠️ Diagnostyka</h2>
-    <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
-    <div class="hidden" id="diagLogWrap">
-      <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
-      <div class="diag-log-row">
-        <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
-        <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+      <div style="margin-top:18px;">
+        <label for="customThemeApiKey" id="advApiKeyLabel">Klucz API Google AI Studio (Gemini)</label>
+        <p class="hint" id="advApiKeyHint">Darmowy klucz — tylko do testów, zapisywany wyłącznie na tym urządzeniu. Zdobędziesz go na aistudio.google.com (konto Google, bez karty).</p>
+        <input type="text" id="customThemeApiKey" class="masked-input" placeholder="Klucz API Google AI Studio (Gemini)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div style="margin-top:18px;">
+        <label for="advAiModelSelect" id="advAiModelLabel">Model AI (Gemini)</label>
+        <p class="hint" id="advAiModelHint">Jeśli generowanie zwraca błąd "wysokie obciążenie" (503), spróbuj przełączyć na inny model.</p>
+        <select id="advAiModelSelect" style="width:100%; padding:12px 14px; border-radius:12px; border:2px solid #E4E9F0; font-size:16px; font-family:'Nunito'; font-weight:700; color:var(--ink); background:#F7F9FC;">
+          <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+        </select>
+      </div>
+      <div style="margin-top:18px;">
+        <h2 id="diagCardTitle" style="font-size:15px;">🛠️ Diagnostyka</h2>
+        <button class="secondary-btn" id="diagShowBtn">Pokaż log</button>
+        <div class="hidden" id="diagLogWrap">
+          <textarea id="diagLogArea" class="diag-log-area" readonly rows="6"></textarea>
+          <div class="diag-log-row">
+            <button class="secondary-btn" id="diagCopyBtn">Kopiuj</button>
+            <button class="secondary-btn" id="diagClearBtn">Wyczyść</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -732,7 +743,7 @@ const I18N = {
     themeCardTitle:'🎨 Motyw planszy',
     themeCardHint:'Każdy motyw ma inny kształt trasy i inne postacie.',
     customThemeCardTitle:'🧪 Motyw Custom (AI) — eksperymentalne',
-    customThemeHint:'Wpisz darmowy klucz API Google AI Studio (Gemini — tylko do testów, zapisywany wyłącznie na tym urządzeniu) i opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz zdobędziesz na aistudio.google.com (konto Google, bez karty).',
+    customThemeHint:'Opisz jaki motyw ma wygenerować AI, np. "jednorożce", "kosmos", "żaby". Klucz API Gemini ustawisz w opcjach zaawansowanych.',
     customThemeApiKeyPlaceholder:'Klucz API Google AI Studio (Gemini)',
     customThemePromptPlaceholder:'np. jednorożce, kosmos, żaby...',
     customThemeGenerateBtn:'✨ Generuj motyw',
@@ -751,6 +762,10 @@ const I18N = {
     advancedShowBtn:'Pokaż opcje zaawansowane',
     advCarSizeLabel:'Próg minimalnego rozmiaru postaci (liczba pól)',
     advCarSizeHint:'Od tylu pól w górę postać na wodzie/śwince/dinozaurze przestaje się zmniejszać. Domyślnie 100.',
+    advApiKeyLabel:'Klucz API Google AI Studio (Gemini)',
+    advApiKeyHint:'Darmowy klucz — tylko do testów, zapisywany wyłącznie na tym urządzeniu. Zdobędziesz go na aistudio.google.com (konto Google, bez karty).',
+    advAiModelLabel:'Model AI (Gemini)',
+    advAiModelHint:'Jeśli generowanie zwraca błąd "wysokie obciążenie" (503), spróbuj przełączyć na inny model.',
     advMapZoomLabel:'Przybliżenie mapy w trybie kompasu',
     advMapZoomHint:'Jak bardzo mapa przybliża się do pojazdu, gdy włączysz podążanie za nim. Domyślnie 17.',
     diagCardTitle:'🛠️ Diagnostyka',
@@ -836,7 +851,7 @@ const I18N = {
     themeCardTitle:'🎨 Board theme',
     themeCardHint:'Each theme has a different track shape and characters.',
     customThemeCardTitle:'🧪 Custom AI theme — experimental',
-    customThemeHint:'Enter a free Google AI Studio (Gemini) API key (testing only, stored only on this device) and describe the theme you want AI to generate, e.g. "unicorns", "space", "frogs". Get a key at aistudio.google.com (Google account, no card).',
+    customThemeHint:'Describe the theme you want AI to generate, e.g. "unicorns", "space", "frogs". Set your Gemini API key in Advanced options.',
     customThemeApiKeyPlaceholder:'Google AI Studio (Gemini) API key',
     customThemePromptPlaceholder:'e.g. unicorns, space, frogs...',
     customThemeGenerateBtn:'✨ Generate theme',
@@ -855,6 +870,10 @@ const I18N = {
     advancedShowBtn:'Show advanced options',
     advCarSizeLabel:'Minimum character size threshold (tile count)',
     advCarSizeHint:'At this tile count and above, the character on water/piggy/dino stops shrinking further. Default 100.',
+    advApiKeyLabel:'Google AI Studio (Gemini) API key',
+    advApiKeyHint:'Free key — testing only, stored only on this device. Get one at aistudio.google.com (Google account, no card).',
+    advAiModelLabel:'AI model (Gemini)',
+    advAiModelHint:'If generating returns a "high demand" (503) error, try switching to a different model.',
     advMapZoomLabel:'Map zoom in compass mode',
     advMapZoomHint:'How close the map zooms in on the vehicle once you turn on following it. Default 17.',
     diagCardTitle:'🛠️ Diagnostics',
@@ -960,6 +979,12 @@ function detectDefaultLang(){
 // or no trip. carSizeRefCount/mapFollowZoom are the two knobs exposed
 // under Options → Advanced.
 const APP_SETTINGS_KEY = 'tripdot_app_settings_v1';
+// wybór modelu Gemini używanego do generowania motywu AI — trzymany jako
+// lista, żeby użytkownik mógł ręcznie przełączyć się na inny, gdy akurat
+// wybrany model zwraca błąd 503 "wysokie obciążenie" (patrz Opcje →
+// Zaawansowane oraz generateCustomTheme, gdzie budowany jest URL requestu)
+const AI_MODEL_OPTIONS = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const AI_MODEL_DEFAULT = AI_MODEL_OPTIONS[0];
 function loadAppSettings(){
   try{
     const raw = localStorage.getItem(APP_SETTINGS_KEY);
@@ -971,7 +996,8 @@ function saveAppSettings(){
     localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify({
       lang: settings.lang,
       carSizeRefCount: settings.carSizeRefCount,
-      mapFollowZoom: settings.mapFollowZoom
+      mapFollowZoom: settings.mapFollowZoom,
+      aiModel: settings.aiModel
     }));
   } catch(e){ /* storage unavailable — ignore */ }
 }
@@ -986,7 +1012,9 @@ let settings = {
   carSizeRefCount: (savedAppSettings && Number.isFinite(savedAppSettings.carSizeRefCount)) ? savedAppSettings.carSizeRefCount : 100,
   // map zoom level while following the vehicle (compass/track-up mode) —
   // see MAP_FOLLOW_ZOOM
-  mapFollowZoom: (savedAppSettings && Number.isFinite(savedAppSettings.mapFollowZoom)) ? savedAppSettings.mapFollowZoom : 17
+  mapFollowZoom: (savedAppSettings && Number.isFinite(savedAppSettings.mapFollowZoom)) ? savedAppSettings.mapFollowZoom : 17,
+  // model Gemini użyty do generowania motywu AI — patrz AI_MODEL_OPTIONS
+  aiModel: (savedAppSettings && AI_MODEL_OPTIONS.includes(savedAppSettings.aiModel)) ? savedAppSettings.aiModel : AI_MODEL_DEFAULT
 };
 
 function t(key){ return I18N[settings.lang][key]; }
@@ -1016,6 +1044,10 @@ function loadCustomThemeFromStorage(){
     if(!raw) return;
     const saved = JSON.parse(raw);
     if(!saved || !saved.style || !saved.pl || !saved.en) return;
+    // motywy AI generowane przed wprowadzeniem facesLeft nie mają tej flagi —
+    // dogrywamy ją tutaj, żeby stare zapisane motywy custom też korzystały
+    // z poprawionej logiki odwracania pojazdu (patrz renderProgress)
+    saved.style.facesLeft = true;
     THEME_STYLE.custom = saved.style;
     I18N.pl.themes.custom = saved.pl;
     I18N.en.themes.custom = saved.en;
@@ -1050,6 +1082,11 @@ function validateCustomThemeResponse(obj){
   for(const f of hexFields) style[f] = obj[f];
   style.vehicle = obj.vehicle; style.startIcon = obj.startIcon; style.finishIcon = obj.finishIcon;
   style.decor = decor;
+  // AI (Gemini) w zdecydowanej większości generuje postacie/ikony domyślnie
+  // patrzące w LEWO (odwrotnie niż wbudowane motywy, patrzące w prawo) —
+  // zamiast zgadywać to za każdym razem z modelu, zakładamy to na stałe dla
+  // wszystkich motywów custom i odwracamy logikę flip w renderProgress()
+  style.facesLeft = true;
   return {
     style,
     pl:{label:obj.labelPl.trim(), shape:obj.shapePl.trim()},
@@ -1058,7 +1095,8 @@ function validateCustomThemeResponse(obj){
 }
 
 async function generateCustomTheme(userPrompt, apiKey){
-  logTripEvent('custom_theme_attempt', {prompt: userPrompt});
+  const modelId = AI_MODEL_OPTIONS.includes(settings.aiModel) ? settings.aiModel : AI_MODEL_DEFAULT;
+  logTripEvent('custom_theme_attempt', {prompt: userPrompt, model: modelId});
   const system = 'Generujesz motyw graficzny dla planszowej gry drogowej dla dzieci. ' +
     'Odpowiedz WYŁĄCZNIE surowym obiektem JSON (bez markdown, bez ```), dokładnie z tymi polami: ' +
     '"labelPl" (krótka nazwa PL, np. "Jednorożce"), "labelEn" (krótka nazwa EN), ' +
@@ -1077,7 +1115,7 @@ async function generateCustomTheme(userPrompt, apiKey){
     '"vehicle" (emoji pojazdu/postaci poruszającej się po trasie), "startIcon" (emoji pola startowego), "finishIcon" (emoji pola mety), ' +
     '"decor" (tablica 4 obiektów {"e":emoji,"a":"bob"|"sway"|"swim"} z dekoracjami w tle pasującymi do motywu). ' +
     'Treść ma być zawsze pogodna, przyjazna dzieciom i neutralna — jeśli zapytanie użytkownika jest niejasne, i tak zwróć wyłącznie pogodny, neutralny, dziecięcy motyw (np. w stylu kwiatowo-łąkowym) zamiast odmawiać czy komentować.';
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + encodeURIComponent(apiKey);
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(modelId) + ':generateContent?key=' + encodeURIComponent(apiKey);
   let res;
   try{
     res = await fetch(url, {
@@ -1096,7 +1134,7 @@ async function generateCustomTheme(userPrompt, apiKey){
   if(!res.ok){
     let apiMessage = null;
     try{ const errBody = await res.json(); apiMessage = errBody && errBody.error && errBody.error.message; } catch(e){}
-    logTripEvent('custom_theme_api_error', {status: res.status, apiMessage});
+    logTripEvent('custom_theme_api_error', {status: res.status, apiMessage, model: modelId});
     const err = new Error('API HTTP ' + res.status);
     err.apiMessage = apiMessage || ('HTTP ' + res.status);
     throw err;
@@ -1155,7 +1193,8 @@ function wireCustomThemeUi(){
       if(e && (e.message === 'bad_json' || e.message === 'bad_shape')){
         status.textContent = t('customThemeErrorInvalid');
       } else if(e && e.apiMessage){
-        status.textContent = t('customThemeErrorApiPrefix') + ' ' + e.apiMessage;
+        const modelUsed = AI_MODEL_OPTIONS.includes(settings.aiModel) ? settings.aiModel : AI_MODEL_DEFAULT;
+        status.textContent = t('customThemeErrorApiPrefix') + ' ' + e.apiMessage + ' (' + modelUsed + ')';
       } else {
         status.textContent = t('customThemeErrorNetwork');
       }
@@ -1934,10 +1973,25 @@ function renderProgress(fraction){
     // drawn facing the same fixed way, so without this it visibly
     // "drives backwards" on those reversed rows
     const prevEl = $('tile-' + (currentTile - 1));
-    if(prevEl){
-      const prevRect = prevEl.getBoundingClientRect();
+    // na samym starcie (kafelek 1) nie ma poprzedniego kafelka do porównania
+    // — bez tego fallbacku ikona AI (domyślnie patrząca w lewo) pokazywała
+    // się w swojej natywnej orientacji, mimo że trasa od startu idzie w
+    // prawo; patrzymy więc na NASTĘPNY kafelek zamiast poprzedniego
+    const refEl = prevEl || $('tile-' + (currentTile + 1));
+    if(refEl){
+      const refRect = refEl.getBoundingClientRect();
       const curRect = cur.getBoundingClientRect();
-      if(curRect.left < prevRect.left - 5) car.classList.add('car-flipped');
+      const diff = curRect.left - refRect.left;
+      // porównanie z NASTĘPNYM kafelkiem daje odwrócony znak różnicy
+      // względem porównania z POPRZEDNIM — stąd flipSign
+      const flipSign = prevEl ? 1 : -1;
+      const movingLeft = flipSign * diff < -5;
+      const movingRight = flipSign * diff > 5;
+      // wbudowane motywy domyślnie patrzą w prawo (flip przy jeździe w lewo);
+      // motywy AI (theme.facesLeft) domyślnie patrzą w lewo, więc logika
+      // odwrócenia jest odwrotna — patrz validateCustomThemeResponse
+      const shouldFlip = theme.facesLeft ? movingRight : movingLeft;
+      if(shouldFlip) car.classList.add('car-flipped');
     }
     cur.appendChild(car);
   }
@@ -2948,6 +3002,13 @@ let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapC
     mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
     mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
 const MAP_FOLLOW_ZOOM_DEFAULT = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving) — adjustable in Options → Advanced, see settings.mapFollowZoom
+// in split view (board+map together) the map panel is roughly half the
+// screen height of fullscreen map mode, so the same zoom level shows a much
+// smaller effective area — one level lower ("-1") gives a comparable field
+// of view to what fullscreen compass mode shows at settings.mapFollowZoom
+function followZoomForView(){
+  return boardViewMode === 'split' ? Math.max(1, settings.mapFollowZoom - 1) : settings.mapFollowZoom;
+}
 // safety margin on top of the exact minimum oversize needed (see
 // resizeRotatedMapCanvas) — 1.0 would be the mathematical minimum, a hair
 // more avoids razor-thin edge cases from sub-pixel rounding
@@ -3246,7 +3307,7 @@ function updateRouteMapCarPosition(){
   const heading = currentHeading();
   applyMapRotationAngle(mapTrackUpMode ? -heading : 0);
   if(mapFollowActive){
-    routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
+    routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:true });
   }
 }
 
@@ -3271,7 +3332,7 @@ function applyBoardViewMode(){
       renderRouteMap(!mapFollowActive);
       if(mapFollowActive){
         const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-        if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:false });
+        if(pos) routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:false });
       }
     }, 0);
   }
@@ -3330,7 +3391,7 @@ $('routeMapFollowBtn').addEventListener('click', () => {
   setTrackUpMode(true);
   if(routeMap){
     const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-    if(pos) routeMap.setView([pos.lat, pos.lng], settings.mapFollowZoom, { animate:true });
+    if(pos) routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:true });
   }
 });
 
@@ -3499,6 +3560,10 @@ function applyStaticTexts(){
   $('advCarSizeHint').textContent = t('advCarSizeHint');
   $('advMapZoomLabel').textContent = t('advMapZoomLabel');
   $('advMapZoomHint').textContent = t('advMapZoomHint');
+  $('advApiKeyLabel').textContent = t('advApiKeyLabel');
+  $('advApiKeyHint').textContent = t('advApiKeyHint');
+  $('advAiModelLabel').textContent = t('advAiModelLabel');
+  $('advAiModelHint').textContent = t('advAiModelHint');
   $('advancedShowBtn').textContent = $('advancedWrap').classList.contains('hidden') ? t('advancedShowBtn') : t('advancedShowBtn') + ' ▲';
   $('diagCardTitle').textContent = t('diagCardTitle');
   $('aboutCardTitle').textContent = t('aboutCardTitle');
@@ -3548,6 +3613,7 @@ function openOptions(){
   $('advCarSizeNum').value = settings.carSizeRefCount;
   $('advMapZoomRange').value = settings.mapFollowZoom;
   $('advMapZoomNum').value = settings.mapFollowZoom;
+  $('advAiModelSelect').value = settings.aiModel;
   $('advancedWrap').classList.add('hidden');
   $('advancedShowBtn').textContent = t('advancedShowBtn');
   $('diagLogWrap').classList.add('hidden');
@@ -3620,6 +3686,10 @@ $('advMapZoomNum').addEventListener('change', () => {
   settings.mapFollowZoom = v;
   $('advMapZoomNum').value = v;
   $('advMapZoomRange').value = v;
+  saveAppSettings();
+});
+$('advAiModelSelect').addEventListener('change', () => {
+  settings.aiModel = $('advAiModelSelect').value;
   saveAppSettings();
 });
 
