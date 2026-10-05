@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.11';
-const APP_BUILD_DATE = '2026-09-29'; // ISO format
+const APP_VERSION = '1.2.12';
+const APP_BUILD_DATE = '2026-10-05'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -37,6 +37,12 @@ const APP_BUILD_DATE = '2026-09-29'; // ISO format
     --sky-bottom:#E8F7FF;
     --asphalt:#3A3F4B;
     --asphalt-light:#4B5160;
+    /* stały, niezależny od motywu planszy kolor UI — --asphalt bywa
+       nadpisywane przez applyThemeVars() (w tym na biało przy jasnych
+       motywach custom AI) i zostaje tak nawet po powrocie na ekran startowy,
+       więc przyciski spoza planszy (np. .search-btn) muszą korzystać z tej
+       osobnej, zawsze ciemnej zmiennej zamiast --asphalt */
+    --ui-dark:#3A3F4B;
     --sun:#FFC93C;
     --grass:#6FCF97;
     --finish:#FF6B5B;
@@ -195,7 +201,7 @@ const APP_BUILD_DATE = '2026-09-29'; // ISO format
   .search-row{display:flex; gap:8px;}
   .search-row input{flex:1;}
   .search-btn{
-    flex-shrink:0; border:none; border-radius:12px; background:var(--asphalt); color:#fff;
+    flex-shrink:0; border:none; border-radius:12px; background:var(--ui-dark); color:#fff;
     font-family:'Baloo 2'; font-weight:600; font-size:14px; padding:0 16px; cursor:pointer;
   }
   .search-btn:disabled{opacity:.5;}
@@ -3307,7 +3313,12 @@ function updateRouteMapCarPosition(){
   const heading = currentHeading();
   applyMapRotationAngle(mapTrackUpMode ? -heading : 0);
   if(mapFollowActive){
-    routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:true });
+    // tylko PANUJEMY do pozycji na każdym ticku GPS — NIE wymuszamy już
+    // domyślnego zoomu przy okazji, bo to uniemożliwiało ręczne
+    // przybliżanie/oddalanie mapy w trybie kompasu (każdy fix GPS i tak
+    // cofał zoom do wartości z Opcji). Zoom wraca do domyślnej wartości
+    // wyłącznie przy włączeniu trybu kompasu — patrz routeMapFollowBtn.
+    routeMap.setView([pos.lat, pos.lng], routeMap.getZoom(), { animate:true });
   }
 }
 
@@ -3332,7 +3343,10 @@ function applyBoardViewMode(){
       renderRouteMap(!mapFollowActive);
       if(mapFollowActive){
         const pos = gpsState.lastPosition || (startLat !== undefined ? {lat:startLat, lng:startLng} : null);
-        if(pos) routeMap.setView([pos.lat, pos.lng], followZoomForView(), { animate:false });
+        // to tylko przełączenie widoku (board/map/split) przy już aktywnym
+        // kompasie, nie jego włączenie — zachowujemy bieżący zoom zamiast
+        // resetować go do domyślnego (patrz komentarz w updateRouteMapCarPosition)
+        if(pos) routeMap.setView([pos.lat, pos.lng], routeMap.getZoom(), { animate:false });
       }
     }, 0);
   }
