@@ -5,8 +5,8 @@
 // ============================================================
 // SINGLE SOURCE OF TRUTH for the app version — bump these two,
 // together with CACHE_NAME in sw.js, whenever releasing a change.
-const APP_VERSION = '1.2.13';
-const APP_BUILD_DATE = '2026-10-05'; // ISO format
+const APP_VERSION = '1.2.15';
+const APP_BUILD_DATE = '2026-10-23'; // ISO format
 // ============================================================
 </script>
 <meta charset="UTF-8">
@@ -2314,6 +2314,13 @@ function acceptProgressFromGps(pos){
   // line mode (hiking/flight-tracking) needs a live heading and odometer
   // just as much as real-route mode does.
   updateHeadingAndOdometer(lat, lng);
+  // first fix of a trip with a custom start: search the whole route once
+  // (we may already be far along it) and count the part already covered
+  const seedingFromStart = !!gpsState.seedFromStart;
+  if(seedingFromStart){
+    gpsState.seedFromStart = false;
+    gpsState.forceFullSearch = true;
+  }
   // projectGpsToRoute needs the PREVIOUS raw fix (to compute heading), so
   // read the match first — then advance lastRawPosition/lastRawTimestamp
   // to this fix. This must happen unconditionally, before any early
@@ -2325,6 +2332,22 @@ function acceptProgressFromGps(pos){
   gpsState.lastRawTimestamp = now;
   let remainingKm, matchedIndex = 0;
   const isRouteTracking = !!(usingRoute && match);
+
+  if(seedingFromStart){
+    if(isRouteTracking && match.distanceKm <= Math.max(0.12, accuracy/1000*4)){
+      // we're on the planned route — everything before this point counts as done
+      traveledKm = Math.max(traveledKm, match.alongKm);
+      logTripEvent('start_seed', {lat, lng, method:'route', traveledKm:+traveledKm.toFixed(3)});
+    } else if(!usingRoute){
+      // straight-line mode: covered = original straight distance minus what's left
+      traveledKm = Math.max(traveledKm, originalTotalDistance - haversine(lat, lng, destLat, destLng));
+      logTripEvent('start_seed', {lat, lng, method:'straight', traveledKm:+traveledKm.toFixed(3)});
+    } else {
+      // not on the planned route — the off-route handling below fetches a
+      // new route from here; seed from its length once it arrives
+      gpsState.seedAfterRecalc = true;
+    }
+  }
 
   if(isRouteTracking){
     remainingKm = Math.max(0, totalDistance - match.alongKm);
@@ -2451,6 +2474,14 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     // geometry. The next GPS tick computes fraction fresh from
     // traveledKm/(traveledKm+remaining) using this new route's numbers.
     currentRemainingKm = newRoute.totalKm;
+    if(gpsState.seedAfterRecalc){
+      // custom start, but we weren't on the planned route: count the
+      // difference between the planned length and the route left from here
+      gpsState.seedAfterRecalc = false;
+      traveledKm = Math.max(traveledKm, originalTotalDistance - newRoute.totalKm);
+      maxProgress = clamp(traveledKm / Math.max(0.001, traveledKm + newRoute.totalKm), 0, 0.98);
+      logTripEvent('start_seed', {lat, lng, method:'recalc', traveledKm:+traveledKm.toFixed(3)});
+    }
     // keep the geometry already driven on the OLD route before it gets
     // replaced — otherwise the map would lose all trace of everything
     // covered before this recalculation, showing only the new remaining
@@ -2478,6 +2509,11 @@ async function recalcRouteFromCurrentPosition(lat, lng){
     logTripEvent('recalc_failed', {lat, lng, mapboxError: e && e.mapboxError, osrmError: e && e.osrmError, message: e && e.message});
     const remainingKm = haversine(lat, lng, destLat, destLng);
     currentRemainingKm = remainingKm;
+    if(gpsState.seedAfterRecalc){
+      gpsState.seedAfterRecalc = false;
+      traveledKm = Math.max(traveledKm, originalTotalDistance - remainingKm);
+      maxProgress = clamp(traveledKm / Math.max(0.001, traveledKm + remainingKm), 0, 0.98);
+    }
     if(usingRoute && routePoints && routePoints.length > 1){
       const oldIdx = clamp(gpsState.lastAcceptedIndex || 0, 0, routePoints.length - 1);
       completedRoutePoints = completedRoutePoints.concat(routePoints.slice(0, oldIdx + 1));
@@ -2928,6 +2964,13 @@ $('startBtn').addEventListener('click', async () => {
   originalTotalDistance = totalDistance;
   currentRemainingKm = totalDistance;
   gpsState = {lastAcceptedIndex:0, lastAcceptedProgress:0, lastPosition:null, lastTimestamp:0, pendingJump:null, lastRawPosition:null, lastRawTimestamp:0, lastHeading:null};
+  // with a custom start point the phone is usually NOT at that point when
+  // the trip begins (e.g. the trip started at home and the app is switched
+  // on later, already on the way). The odometer only counts movement from
+  // the first GPS fix, so the distance between the chosen start and where
+  // we really are was never counted — the board stayed at 0% / at the
+  // start tile. The first fix seeds traveledKm with that distance instead.
+  gpsState.seedFromStart = (startMode === 'custom');
 
   if(totalDistance < 0.05){
     statusEl.textContent = t('errAlreadyThere');
@@ -3006,7 +3049,8 @@ let routeMap = null, routeMapLineDone = null, routeMapLineTodo = null, routeMapC
     boardViewMode = 'board', // 'board' | 'map' | 'split'
     mapFollowActive = false,
     mapTrackUpMode = false, // false = north-up (classic), true = current heading always points up
-    mapRotationAngle = 0; // degrees the map is currently visually rotated by (0 in north-up mode)
+    mapRotationAngle = 0, // degrees the map is currently visually rotated by (0 in north-up mode)
+    mapRotationAngleUnwrapped = 0; // same angle but never wrapped to 0–360, so CSS transitions always take the shortest way (no full spin when the heading crosses north)
 const MAP_FOLLOW_ZOOM_DEFAULT = 17; // similar to typical turn-by-turn nav apps (Google Maps/Waze use ~16-17 while driving) — adjustable in Options → Advanced, see settings.mapFollowZoom
 // in split view (board+map together) the map panel is roughly half the
 // screen height of fullscreen map mode, so the same zoom level shows a much
@@ -3088,9 +3132,18 @@ function setTrackUpMode(enabled){
 // Cheap: updates the map's CSS rotation and keeps the vehicle icon
 // correctly oriented. Safe to call on every GPS/heading update.
 function applyMapRotationAngle(deg){
-  mapRotationAngle = ((deg % 360) + 360) % 360;
+  // the CSS transition on #routeMapCanvas animates between raw numbers, so
+  // jumping e.g. 359° → 1° used to spin the map almost a full turn backwards
+  // (exactly when the heading crossed north — the same moment the vehicle
+  // mirrors). Keep an unwrapped angle and always move it by the shortest delta.
+  const target = ((deg % 360) + 360) % 360;
+  const current = ((mapRotationAngleUnwrapped % 360) + 360) % 360;
+  let delta = target - current;
+  if(delta > 180) delta -= 360; else if(delta < -180) delta += 360;
+  mapRotationAngleUnwrapped += delta;
+  mapRotationAngle = target;
   const canvas = $('routeMapCanvas');
-  if(canvas) canvas.style.transform = 'rotate(' + mapRotationAngle + 'deg)';
+  if(canvas) canvas.style.transform = 'rotate(' + mapRotationAngleUnwrapped + 'deg)';
   updateVehicleMarkerOrientation();
 }
 // The vehicle art is a side-view sprite (see vehicle-*.png) — it was never
@@ -3120,7 +3173,7 @@ function updateVehicleMarkerOrientation(){
   if(!routeMapCarMarker._rotateEl) return;
   const heading = currentHeading();
   const flip = Math.sin(heading * Math.PI / 180) < 0 ? -1 : 1; // < 0 → heading has a westward component
-  routeMapCarMarker._rotateEl.style.transform = 'rotate(' + (-mapRotationAngle) + 'deg) scaleX(' + flip + ')';
+  routeMapCarMarker._rotateEl.style.transform = 'rotate(' + (-mapRotationAngleUnwrapped) + 'deg) scaleX(' + flip + ')';
 }
 
 // ---- manual drag-to-pan correction while the map is visually rotated ----
